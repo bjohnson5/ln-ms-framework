@@ -15,7 +15,7 @@ jobs:
           submodules: false
           path: ln-ms-framework
       - name: Install Rust
-        run: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | sh
+        run: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -ysSf | sh
         working-directory: ln-ms-framework
       - name: Build lib
         run: cargo build
