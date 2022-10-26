@@ -1,0 +1,28 @@
+name: Main Workflow
+
+on: push
+
+jobs:
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout ln-ms-framework
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+          submodules: false
+          path: ln-ms-framework
+      - name: Install Rust
+        run: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -sSf | sh
+        working-directory: ln-ms-framework
+      - name: Build lib
+        run: cargo build
+        working-directory: ln-ms-framework/ln_ms_lib
+      - name: Build server
+        run: cargo build
+        working-directory: ln-ms-framework/ln_ms_server
+      - name: Run tests
+        run: cargo test
+        working-directory: ln-ms-framework/ln_ms_lib
