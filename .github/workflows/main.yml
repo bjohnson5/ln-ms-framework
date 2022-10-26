@@ -17,12 +17,9 @@ jobs:
       - name: Install Rust
         run: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -ysSf | sh
         working-directory: ln-ms-framework
-      - name: Build lib
-        run: cargo build
-        working-directory: ln-ms-framework/ln_ms_lib
-      - name: Build server
+      - name: Build
         run: cargo build
         working-directory: ln-ms-framework/ln_ms_server
-      - name: Run tests
+      - name: Test
         run: cargo test
         working-directory: ln-ms-framework/ln_ms_lib
