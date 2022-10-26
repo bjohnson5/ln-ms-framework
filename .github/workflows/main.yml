@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout ln-ms-framework
-        uses: actions/checkout@v2.5
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
           submodules: false
