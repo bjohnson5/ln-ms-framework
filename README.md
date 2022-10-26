@@ -1,6 +1,12 @@
 # ln-ms-framework
 A Bitcoin Lightning Network Modeling and Simulation Framework
 
+## ln_ms_lib
+A library for creating a Lightning Network simulation
+
+## ln_ms_server
+An example API that uses ln_ms_lib to define and run a Lightning Network simulation
+
 ## Example User Story
 1. Create Node A
 2. Create Node B
