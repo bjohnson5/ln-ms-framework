@@ -1,0 +1,21 @@
+// https://yuml.me/diagram/scruffy/class/draw
+
+[LnSimulation|+name: string;+start_time: int;+end_time: int|Run();ImportNetwork();CreateNode();OpenChannel();CreateEvent()]
+[LnSimulation]<>-nodes*>[LnNode]
+[LnSimulation]<>-channels*>[LnChannel]
+[LnSimulation]<>-em>[LnEventManager]<>-events*>[LnEvent|+time: int]
+[LnSimulation]<>-tg>[LnTransactionGenerator]
+[LnSimulation]<>-analyzer>[LnAnalyzer]
+
+[LnSimulation]-[note: Import a network layout from Polar project or real LN node network info]
+[LnEventManager]-[note: Progresses time and kicks off events]
+[LnTransactionGenerator]-[note: Generates simulated transactions]
+[LnAnalyzer]-[note: Collects stats and network data]
+[LnNode]-[note: Represents and controls a Sensei lightweight node]
+
+[LnEvent]^[NodeOfflineEvent]
+[LnEvent]^[NodeOnlineEvent]
+[LnEvent]^[RoutingFeeIncreaseEvent]
+[LnEvent]^[RoutingFeeDecreaseEvent]
+[LnEvent]^[OpenChannelEvent]
+[LnEvent]^[CloseChannelEvent]
