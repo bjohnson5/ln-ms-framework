@@ -52,7 +52,7 @@ impl LnSimulation {
         self.nodes.insert(name_key, node);
     }
 
-    pub fn open_channel(&mut self, node1_name: String, node2_name: String, amount: i32) {
+    pub fn create_channel(&mut self, node1_name: String, node2_name: String, amount: i32) {
         println!("Open Channel: {} -> {} for {} sats", node1_name, node2_name, amount);
         let channel1 = LnChannel {
             node1: node1_name,
@@ -92,7 +92,7 @@ mod tests {
         let mut ln_sim = LnSimulation::new();
         ln_sim.create_node(String::from("blake"));
         ln_sim.create_node(String::from("brianna"));
-        ln_sim.open_channel(String::from("blake"), String::from("brianna"), 500);
+        ln_sim.create_channel(String::from("blake"), String::from("brianna"), 500);
         ln_sim.create_node_online_event(String::from("blake"));
         ln_sim.create_node_offline_event(String::from("blake"));
 

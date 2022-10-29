@@ -1,43 +1,109 @@
-use std::{
-    io::{prelude::*, BufReader},
-    net::{TcpListener, TcpStream},
-};
-use ln_ms_lib::LnSimulation;
+use actix_web::{App, HttpServer};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::{SwaggerUi, Url};
 
-const HTML_STRING: &str = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Hello!</title></head><body><h1>Hello!</h1><p>Hi from Rust</p></body></html>";
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
+    #[derive(OpenApi)]
+    #[openapi(
+        paths(
+            api::hello,
+            api::create_sim,
+            api::create_node,
+            api::create_channel,
+            api::create_event,
+            api::run_sim
+        ),
+        components(
+            schemas(api::LnRequest)
+        )
+    )]
+    struct ApiDoc;
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-
-        println!("Connection established!");
-        handle_connection(stream);
-    }
+    HttpServer::new(move || {
+        App::new()
+            .service(api::hello)
+            .service(api::create_sim)
+            .service(api::create_node)
+            .service(api::create_channel)
+            .service(api::create_event)
+            .service(api::run_sim)
+            .service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(vec![
+                (
+                    Url::new("api", "/api-doc/openapi.json"), 
+                    ApiDoc::openapi()
+                )
+                ])
+            )
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
 }
 
-fn handle_connection(mut stream: TcpStream) {
-    let buf_reader = BufReader::new(&mut stream);
-    let _http_request: Vec<_> = buf_reader
-        .lines()
-        .map(|result| result.unwrap())
-        .take_while(|line| !line.is_empty())
-        .collect();
+pub mod api {
+    use actix_web::{get, post, HttpResponse, Responder};
+    use serde::{Deserialize, Serialize};
+    use utoipa::{ToSchema, IntoParams};
+    
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct LnRequest {
+        #[schema(example = 1)]
+        id: i32,
+    }
 
-    // Setup the simulation
-    let mut ln_sim = LnSimulation::new();
-    ln_sim.create_node(String::from("blake"));
-    ln_sim.create_node(String::from("brianna"));
-    ln_sim.open_channel(String::from("blake"), String::from("brianna"), 500);
-    ln_sim.create_node_online_event(String::from("blake"));
-    ln_sim.create_node_offline_event(String::from("blake"));
+    #[allow(dead_code)]
+    #[derive(Deserialize, Debug, IntoParams)]
+    pub struct LnParams {
+        id: i32,
+    }
 
-    // Start the simulation
-    ln_sim.run();
+    #[utoipa::path(
+        params(
+            LnParams
+        ),
+        responses(
+            (status = 200, description = "OK", body = String),
+        )
+    )]
+    #[get("/")]
+    pub async fn hello() -> impl Responder {
+        HttpResponse::Ok().body("Hello world!")
+    }
 
-    let status_line = "HTTP/1.1 200 OK";
-    let length = HTML_STRING.len();
-    let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{HTML_STRING}");
-    stream.write_all(response.as_bytes()).unwrap();
+    #[utoipa::path(
+        request_body = LnRequest,
+        responses(
+            (status = 200, description = "Successful", body = String)
+        )
+    )]
+    #[post("/create_sim")]
+    pub async fn create_sim(req_body: String) -> impl Responder {
+        HttpResponse::Ok().body(req_body)
+    }
+    
+    #[utoipa::path()]
+    #[post("/create_node")]
+    pub async fn create_node(req_body: String) -> impl Responder {
+        HttpResponse::Ok().body(req_body)
+    }
+
+    #[utoipa::path()]
+    #[post("/create_channel")]
+    pub async fn create_channel(req_body: String) -> impl Responder {
+        HttpResponse::Ok().body(req_body)
+    }
+
+    #[utoipa::path()]
+    #[post("/create_event")]
+    pub async fn create_event(req_body: String) -> impl Responder {
+        HttpResponse::Ok().body(req_body)
+    }
+
+    #[utoipa::path()]
+    #[post("/run_sim")]
+    pub async fn run_sim(req_body: String) -> impl Responder {
+        HttpResponse::Ok().body(req_body)
+    }
 }
