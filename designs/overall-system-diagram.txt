@@ -1,0 +1,5 @@
+[Web API; ln_ms_server]<->[Docker Container 1; database]
+[Web API]->[Simulation Library; ln_ms_lib]
+[Simulation Library]<->[Docker Container 2; sensei]
+[Web Client]->[Web API]-[note: uses the library to create simulations and saves them to the database]
+[Applications/Tests]->[Simulation Library]-[note: controls the child nodes in the sensei docker container]
