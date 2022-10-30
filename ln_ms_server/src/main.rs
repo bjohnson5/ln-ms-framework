@@ -13,7 +13,8 @@ async fn main() -> std::io::Result<()> {
             api::create_node,
             api::create_channel,
             api::create_event,
-            api::run_sim
+            api::run_sim,
+            api::import_network
         ),
         components(
             schemas(api::LnRequest)
@@ -29,6 +30,7 @@ async fn main() -> std::io::Result<()> {
             .service(api::create_channel)
             .service(api::create_event)
             .service(api::run_sim)
+            .service(api::import_network)
             .service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(vec![
                 (
                     Url::new("api", "/api-doc/openapi.json"), 
@@ -104,6 +106,12 @@ pub mod api {
     #[utoipa::path()]
     #[post("/run_sim")]
     pub async fn run_sim(req_body: String) -> impl Responder {
+        HttpResponse::Ok().body(req_body)
+    }
+
+    #[utoipa::path()]
+    #[post("/import_network")]
+    pub async fn import_network(req_body: String) -> impl Responder {
         HttpResponse::Ok().body(req_body)
     }
 }

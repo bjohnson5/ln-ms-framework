@@ -1,6 +1,7 @@
 use crate::ln_node::LnNode;
 
 // Each Event should implement this trait
+// The execute function borrows a reference to the node that this event is for
 pub trait LnEvent {
     fn execute(&self, node: &LnNode);
     fn get_node_name(&self) -> String;

@@ -1,3 +1,4 @@
+// This struct will control the lightweight nodes in a docker container where the simulated network lives
 pub struct LnNode {
     pub name: String
 }

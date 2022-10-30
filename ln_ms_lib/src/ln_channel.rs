@@ -1,3 +1,4 @@
+// This struct represents all of the channels defined in the simuation
 pub struct LnChannel {
     pub node1: String,
     pub node2: String,
