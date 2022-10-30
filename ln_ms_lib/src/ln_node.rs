@@ -5,10 +5,10 @@ pub struct LnNode {
 
 impl LnNode {
     pub fn start(&self) {
-        println!("starting {}", self.name);
+        println!("LnNode:{} -- starting {}", crate::get_current_time(), self.name);
     }
 
     pub fn stop(&self) {
-        println!("stopping {}", self.name);
+        println!("LnNode:{} -- stopping {}", crate::get_current_time(), self.name);
     }
 }

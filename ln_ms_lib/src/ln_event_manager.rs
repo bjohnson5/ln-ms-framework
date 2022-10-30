@@ -27,7 +27,7 @@ impl LnEventManager {
     // longer durations and at a faster-than-real-time rate
 
     pub fn run(&self, sim: &LnSimulation) {
-        println!("Running LnEventManager for simulation: {} for {} seconds", sim.name, sim.duration);
+        println!("NodeOfflineEvent:{} -- running LnEventManager for simulation: {} for {} seconds", crate::get_current_time(), sim.name, sim.duration);
         let one_sec = time::Duration::from_secs(1);
         let mut current_sec = 0;
         while current_sec <= sim.duration {
@@ -36,7 +36,7 @@ impl LnEventManager {
                 let current_events = &self.events[&current_sec];
                 let current_events_iter = current_events.iter();
                 for e in current_events_iter {
-                    println!("Running a {} event for {}", e.get_name(), e.get_node_name());
+                    println!("NodeOfflineEvent:{} -- running a {} event for {}", crate::get_current_time(), e.get_name(), e.get_node_name());
                     let node = &sim.nodes[&e.get_node_name()];
                     e.execute(node);
                 }

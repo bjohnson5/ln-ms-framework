@@ -9,6 +9,8 @@ use ln_event_manager::LnEventManager;
 use ln_channel::LnChannel;
 use ln_event::NodeOnlineEvent;
 use ln_event::NodeOfflineEvent;
+extern crate chrono;
+use chrono::Local;
 
 // Represents a simuation of a lightning network that runs for a specified duration
 // This struct will be the public facing API for users of this library
@@ -41,7 +43,7 @@ impl LnSimulation {
     }
 
     pub fn run(&self) -> bool {
-        println!("Running simulation: {} ({} seconds)", self.name, self.duration);
+        println!("LnSimulation:{} -- running simulation: {} ({} seconds)", get_current_time(), self.name, self.duration);
 
         // TODO:
         // 1. Create the initial state of the network (nodes, channels, balances, etc...)
@@ -67,12 +69,12 @@ impl LnSimulation {
     // Parse a file that contains a definition of a LN topology
     // This definition could be from a project like Polar or from dumping the network information from the mainnet
     pub fn import_network(&self, filename: String) {
-        println!("Importing network definition from {}", filename);
+        println!("LnSimulation:{} -- importing network definition from {}", get_current_time(), filename);
     }
 
     // Create a lightweight node in the simulated network
     pub fn create_node(&mut self, name: String) {
-        println!("Create Node: {}", name);
+        println!("LnSimulation:{} -- create Node: {}", get_current_time(), name);
         let name_key = name.clone();
         let node = LnNode {
             name: name
@@ -82,7 +84,7 @@ impl LnSimulation {
 
     // Open a channel between two lightweight nodes in the simulated network
     pub fn create_channel(&mut self, node1_name: String, node2_name: String, amount: i32) {
-        println!("Open Channel: {} -> {} for {} sats", node1_name, node2_name, amount);
+        println!("LnSimulation:{} -- open Channel: {} -> {} for {} sats", get_current_time(), node1_name, node2_name, amount);
         let channel1 = LnChannel {
             node1: node1_name,
             node2: node2_name,
@@ -94,7 +96,7 @@ impl LnSimulation {
 
     // Create an event that will start up a node in the simulated network
     pub fn create_node_online_event(&mut self, name: String, time: u64) {
-        println!("Add NodeOnlineEvent for: {} at {} seconds", name, time);
+        println!("LnSimulation:{} -- add NodeOnlineEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = NodeOnlineEvent {
             node_name: name
         };
@@ -104,13 +106,18 @@ impl LnSimulation {
 
     // Create an event that will shut down a node in the simulated network
     pub fn create_node_offline_event(&mut self, name: String, time: u64) {
-        println!("Add NodeOfflineEvent for: {} at {} seconds", name, time);
+        println!("LnSimulation:{} -- add NodeOfflineEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = NodeOfflineEvent {
             node_name: name
         };
 
         self.em.add_event(Box::new(event), time);
     }
+}
+
+pub fn get_current_time() -> String {
+    let date = Local::now();
+    format!("{}", date.format("[%Y-%m-%d][%H:%M:%S]"))
 }
 
 #[cfg(test)]

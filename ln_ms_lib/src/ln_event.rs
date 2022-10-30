@@ -15,7 +15,7 @@ pub struct NodeOfflineEvent {
 
 impl LnEvent for NodeOfflineEvent {
     fn execute(&self, node: &LnNode) {
-        println!("Node going offline: {}", self.node_name);
+        println!("NodeOfflineEvent:{} -- node going offline: {}", crate::get_current_time(), self.node_name);
         node.stop();
     }
 
@@ -36,7 +36,7 @@ pub struct NodeOnlineEvent {
 
 impl LnEvent for NodeOnlineEvent {
     fn execute(&self, node: &LnNode) {
-        println!("Node going online: {}", self.node_name);
+        println!("NodeOfflineEvent:{} -- node going online: {}", crate::get_current_time(), self.node_name);
         node.start()
     }
 

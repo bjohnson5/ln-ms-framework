@@ -8,7 +8,7 @@ async fn main() -> std::io::Result<()> {
     #[derive(OpenApi)]
     #[openapi(
         paths(
-            api::hello,
+            api::get_sim,
             api::create_sim,
             api::create_node,
             api::create_channel,
@@ -16,15 +16,21 @@ async fn main() -> std::io::Result<()> {
             api::run_sim,
             api::import_network
         ),
-        components(
-            schemas(api::LnRequest)
+        components(schemas(
+            api::CreateSimRequest,
+            api::CreateNodeRequest,
+            api::CreateChannelRequest,
+            api::CreateEventRequest,
+            api::RunSimulationRequest,
+            api::ImportNetworkRequest
+        )
         )
     )]
     struct ApiDoc;
 
     HttpServer::new(move || {
         App::new()
-            .service(api::hello)
+            .service(api::get_sim)
             .service(api::create_sim)
             .service(api::create_node)
             .service(api::create_channel)
@@ -45,73 +51,176 @@ async fn main() -> std::io::Result<()> {
 }
 
 pub mod api {
-    use actix_web::{get, post, HttpResponse, Responder};
+    use actix_web::{get, post, HttpResponse, Responder, web::{Json, Path}};
     use serde::{Deserialize, Serialize};
-    use utoipa::{ToSchema, IntoParams};
-    
-    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
-    pub struct LnRequest {
-        #[schema(example = 1)]
-        id: i32,
-    }
+    use utoipa::{ToSchema};
+    use ln_ms_lib::LnSimulation;
 
-    #[allow(dead_code)]
-    #[derive(Deserialize, Debug, IntoParams)]
-    pub struct LnParams {
-        id: i32,
-    }
+    // TODO: This will not be a global variable, each endpoint will get the LnSimulation object from the database
+    // For simplicity it will be used as a global variable right now in order to demonstate the use case
+    static mut SIM: Option<LnSimulation> = None;
 
     #[utoipa::path(
         params(
-            LnParams
+            ("sim_name", description = "The name of the simulation to get information about")
         ),
         responses(
-            (status = 200, description = "OK", body = String),
+            (status = 200, description = "Get information about a simulation", body = String),
         )
     )]
-    #[get("/")]
-    pub async fn hello() -> impl Responder {
-        HttpResponse::Ok().body("Hello world!")
+    #[get("/get_sim/{sim_name}")]
+    pub async fn get_sim(sim_name: Path<String>) -> impl Responder {
+        let sim_name = sim_name.into_inner();
+        let response = String::from("Simulation Name: ") + &sim_name;
+        HttpResponse::Ok().body(response)
+    }
+
+    // A request to create a new simulation
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct CreateSimRequest {
+        name: String,
+        duration: u64
     }
 
     #[utoipa::path(
-        request_body = LnRequest,
+        request_body = CreateSimRequest,
         responses(
-            (status = 200, description = "Successful", body = String)
+            (status = 200, description = "Create a new simulation", body = String)
         )
     )]
     #[post("/create_sim")]
-    pub async fn create_sim(req_body: String) -> impl Responder {
-        HttpResponse::Ok().body(req_body)
+    pub async fn create_sim(req: Json<CreateSimRequest>) -> impl Responder {
+        let create_sim_req = req.into_inner();
+        unsafe {
+            // TODO: Create the simulation object and save it to a database and do not use a static global unsafe variable
+            SIM = Option::Some(LnSimulation::new(create_sim_req.name, create_sim_req.duration));
+        }
+        HttpResponse::Ok().body("Created Simulation")
     }
-    
-    #[utoipa::path()]
+
+    // A request to create a new node and add it to the simulation
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct CreateNodeRequest {
+        name: String,
+    }
+
+    #[utoipa::path(
+        request_body = CreateNodeRequest,
+        responses(
+            (status = 200, description = "Create a new node", body = String)
+        )
+    )]
     #[post("/create_node")]
-    pub async fn create_node(req_body: String) -> impl Responder {
-        HttpResponse::Ok().body(req_body)
+    pub async fn create_node(req: Json<CreateNodeRequest>) -> impl Responder {
+        let create_node_req = req.into_inner();
+        unsafe {
+            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            let sim = SIM.as_mut().unwrap();
+            sim.create_node(create_node_req.name)
+        }
+        HttpResponse::Ok().body("Created Node")
     }
 
-    #[utoipa::path()]
+    // A request to create a new channel and add it to the simulation
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct CreateChannelRequest {
+        node1_name: String,
+        node2_name: String,
+        amount: i32
+    }
+
+    #[utoipa::path(
+        request_body = CreateChannelRequest,
+        responses(
+            (status = 200, description = "Create a new channel", body = String)
+        )
+    )]
     #[post("/create_channel")]
-    pub async fn create_channel(req_body: String) -> impl Responder {
-        HttpResponse::Ok().body(req_body)
+    pub async fn create_channel(req: Json<CreateChannelRequest>) -> impl Responder {
+        let create_channel_req = req.into_inner();
+        unsafe {
+            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            let sim = SIM.as_mut().unwrap();
+            sim.create_channel(create_channel_req.node1_name, create_channel_req.node2_name, create_channel_req.amount);
+        }
+        HttpResponse::Ok().body("Created Channel")
     }
 
-    #[utoipa::path()]
+    // A request to create a new event and add it to the simulation
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct CreateEventRequest {
+        event_type: String,
+        node_name: String,
+        time: u64
+    }
+
+    #[utoipa::path(
+        request_body = CreateEventRequest,
+        responses(
+            (status = 200, description = "Create a new event", body = String)
+        )
+    )]
     #[post("/create_event")]
-    pub async fn create_event(req_body: String) -> impl Responder {
-        HttpResponse::Ok().body(req_body)
+    pub async fn create_event(req: Json<CreateEventRequest>) -> impl Responder {
+        let create_event_req = req.into_inner();
+        unsafe {
+            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            let sim = SIM.as_mut().unwrap();
+            // TODO: This will need to be much more generic and the request will need to only allow supported events
+            // This is for simplicity while creating a proof of concept
+            if create_event_req.event_type == "NodeOfflineEvent" {
+                sim.create_node_offline_event(create_event_req.node_name, create_event_req.time);
+            } else {
+                sim.create_node_online_event(create_event_req.node_name, create_event_req.time);
+            }
+        }
+        HttpResponse::Ok().body("Event Created")
     }
 
-    #[utoipa::path()]
+    // A request to start the simulation
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct RunSimulationRequest {
+        name: String
+
+    }
+
+    #[utoipa::path(
+        request_body = RunSimulationRequest,
+        responses(
+            (status = 200, description = "Run a simulation", body = String)
+        )
+    )]
     #[post("/run_sim")]
-    pub async fn run_sim(req_body: String) -> impl Responder {
-        HttpResponse::Ok().body(req_body)
+    pub async fn run_sim(req: Json<RunSimulationRequest>) -> impl Responder {
+        let run_sim_request = req.into_inner();
+        unsafe {
+            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            let sim = SIM.as_mut().unwrap();
+            sim.run();
+        }
+        HttpResponse::Ok().body(String::from("Running Simulation: ") + &run_sim_request.name)
     }
 
-    #[utoipa::path()]
+    // A request to import a network definition from a file
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct ImportNetworkRequest {
+        filename: String
+    }
+
+    #[utoipa::path(
+        request_body = ImportNetworkRequest,
+        responses(
+            (status = 200, description = "Import a network definition from file", body = String)
+        )
+    )]
     #[post("/import_network")]
-    pub async fn import_network(req_body: String) -> impl Responder {
-        HttpResponse::Ok().body(req_body)
+    pub async fn import_network(req: Json<ImportNetworkRequest>) -> impl Responder {
+        let import_request = req.into_inner();
+        unsafe {
+            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            let sim = SIM.as_mut().unwrap();
+            sim.import_network(import_request.filename);
+        }
+        HttpResponse::Ok().body("Network Imported")
     }
 }
