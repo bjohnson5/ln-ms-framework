@@ -26,3 +26,38 @@ cargo build
 Then navigate to http://localhost:8080/swagger-ui/index.html to view the swagger API
 
 You can then create nodes and events and run the simulation. The output will be logged to the terminal.
+NOTE: the first thing to do is use the create_sim endpoint, otherwise adding nodes and events will not work.
+
+Example:
+1. create_sim - Request Body:
+```
+{
+  "duration": 20,
+  "name": "test"
+}
+```
+
+2. create_node - Request Body:
+```
+{
+  "name": "blake"
+}
+```
+
+3. create_event - Request Body:
+```
+{
+  "event_type": "NodeOnlineEvent",
+  "node_name": "blake",
+  "time": 10
+}
+```
+
+4. run_sim - Request Body:
+```
+{
+  "name": "test"
+}
+```
+
+5. Watch the terminal execute the online event at 10s
