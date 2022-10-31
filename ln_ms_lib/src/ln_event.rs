@@ -1,5 +1,7 @@
 use crate::ln_node::LnNode;
 
+// TODO: Implement all supported Events
+
 // Each Event should implement this trait
 // The execute function borrows a reference to the node that this event is for
 pub trait LnEvent {

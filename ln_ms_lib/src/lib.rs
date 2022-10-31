@@ -17,9 +17,7 @@ use chrono::Local;
 // A user will define the initial state of the network by adding nodes, channels, events, etc...
 // After the LnSimulation is defined it will be run and the events will take place
 
-// TODO:
-// 1. Add the TransactionGenerator thread that will created simulated network traffic
-// 2. Add the Analyzer thread that will collect stats and report on the state of the network
+// NOTE: This project is currently setup as a Proof of Concept and does not connect or simulate any LN operations
 
 pub struct LnSimulation {
     name: String,
@@ -44,6 +42,11 @@ impl LnSimulation {
 
     pub fn run(&self) -> bool {
         println!("LnSimulation:{} -- running simulation: {} ({} seconds)", get_current_time(), self.name, self.duration);
+
+        // Start all the main threads:
+        // 1. Network Analyzer
+        // 2. Transaction Generator
+        // 3. Event Manager
 
         // TODO:
         // 1. Create the initial state of the network (nodes, channels, balances, etc...)
@@ -70,6 +73,7 @@ impl LnSimulation {
     // This definition could be from a project like Polar or from dumping the network information from the mainnet
     pub fn import_network(&self, filename: String) {
         println!("LnSimulation:{} -- importing network definition from {}", get_current_time(), filename);
+        // TODO: Implement
     }
 
     // Create a lightweight node in the simulated network
@@ -93,6 +97,9 @@ impl LnSimulation {
         };
         self.channels.push(channel1);
     }
+
+    // TODO: There should be a generic create_event function that allows the user to create all supported events
+    // NOTE: For simplicity while proving the concept two hard coded event functions will work
 
     // Create an event that will start up a node in the simulated network
     pub fn create_node_online_event(&mut self, name: String, time: u64) {

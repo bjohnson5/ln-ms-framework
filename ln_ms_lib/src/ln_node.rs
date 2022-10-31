@@ -1,4 +1,5 @@
 // This struct will control the lightweight nodes in a docker container where the simulated network lives
+// TODO: Connect to Sensei nodes and implement the different operations for this struct
 pub struct LnNode {
     pub name: String
 }
