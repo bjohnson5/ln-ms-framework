@@ -7,11 +7,14 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    ports:
+      - 18444
+      - 18443
+      - 28332
+      - 28333
     steps:
       - name: Install nigiri
         run: sudo curl https://getnigiri.vulpem.com | bash
-      - name: Install Rust
-        run: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -ysSf | sh
       - name: Checkout ln-ms-framework
         uses: actions/checkout@v3
         with:
