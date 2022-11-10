@@ -6,7 +6,7 @@ jobs:
   build_and_test:
     name: Build and Test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout ln-ms-framework
         uses: actions/checkout@v3
