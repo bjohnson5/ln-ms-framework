@@ -75,10 +75,17 @@ impl LnSimulation {
         let this_file = file!();
         let sensei_data_dir = this_file.replace("lib.rs", "sensei_data_dir");
         let sensei_config_file = sensei_data_dir.clone() + "/config.json";
-        let mut config = SenseiConfig::from_file(sensei_config_file, None);
+        let mut config = SenseiConfig::from_file(sensei_config_file.clone(), None);
         let sqlite_path = sensei_data_dir.clone() + "/" + config.database_url.as_str();
         config.database_url = format!("sqlite://{}?mode=rwc", sqlite_path);
         let stop_signal = Arc::new(AtomicBool::new(false));
+
+        println!("sensei data: {}", sensei_data_dir);
+        println!("sensei config file: {}", sensei_config_file);
+        println!("sensei database: {}", config.database_url);
+        println!("bitcoind username: {}", config.bitcoind_rpc_username);
+        println!("bitcoind password: {}", config.bitcoind_rpc_password);
+        println!("bitcoin host: {}", config.bitcoind_rpc_host);
 
         // Setup the sensei database runtime
         let sensei_db_runtime = Builder::new_multi_thread()

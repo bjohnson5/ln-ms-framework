@@ -8,12 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Install docker
-        run: sudo apt-get install docker
-      - name: Install docker-compose
-        run: sudo apt-get install docker-compose
-      - name: Add user to docker group
-        run: sudo usermod -aG docker $USER
       - name: Install nigiri
         run: sudo curl https://getnigiri.vulpem.com | bash
       - name: Install Rust
