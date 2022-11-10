@@ -76,7 +76,7 @@ impl LnSimulation {
         let sensei_data_dir = this_file.replace("lib.rs", "sensei_data_dir");
         let sensei_config_file = sensei_data_dir.clone() + "/config.json";
         let mut config = SenseiConfig::from_file(sensei_config_file, None);
-        let sqlite_path = config.database_url;
+        let sqlite_path = sensei_data_dir.clone() + "/" + config.database_url.as_str();
         config.database_url = format!("sqlite://{}?mode=rwc", sqlite_path);
         let stop_signal = Arc::new(AtomicBool::new(false));
 
