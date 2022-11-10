@@ -9,16 +9,15 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Install docker
-        run: sudo apt install docker
+        run: sudo apt-get install docker
       - name: Install docker-compose
-        run: sudo apt install docker-compose
+        run: sudo apt-get install docker-compose
       - name: Add user to docker group
         run: sudo usermod -aG docker $USER
       - name: Install nigiri
         run: sudo curl https://getnigiri.vulpem.com | bash
       - name: Install Rust
         run: curl --proto '=https' --tlsv1.3 https://sh.rustup.rs -ysSf | sh
-        working-directory: ln-ms-framework
       - name: Checkout ln-ms-framework
         uses: actions/checkout@v3
         with:
