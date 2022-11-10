@@ -71,9 +71,10 @@ impl LnSimulation {
         println!("LnSimulation:{} -- running simulation: {} ({} seconds)", get_current_time(), self.name, self.duration);
 
         // Setup the sensei config
-        // TODO: fix the hard coded paths
-        let sensei_data_dir = "/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/sensei_data_dir";
-        let sensei_config_file = String::from("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/sensei_data_dir/config.json");
+        // TODO: fix the paths, this is ugly
+        let this_file = file!();
+        let sensei_data_dir = this_file.replace("lib.rs", "sensei_data_dir");
+        let sensei_config_file = sensei_data_dir.clone() + "/config.json";
         let mut config = SenseiConfig::from_file(sensei_config_file, None);
         let sqlite_path = config.database_url;
         config.database_url = format!("sqlite://{}?mode=rwc", sqlite_path);
@@ -162,7 +163,7 @@ impl LnSimulation {
 
             let sas = Arc::new(
                 AdminService::new(
-                    sensei_data_dir,
+                    &sensei_data_dir,
                     config.clone(),
                     database,
                     chain_manager,
