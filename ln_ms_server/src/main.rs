@@ -28,6 +28,8 @@ async fn main() -> std::io::Result<()> {
     )]
     struct ApiDoc;
 
+    println!("View simulation swagger api here: http://localhost:8080/swagger-ui/index.html");
+
     HttpServer::new(move || {
         App::new()
             .service(api::get_sim)
@@ -51,6 +53,8 @@ async fn main() -> std::io::Result<()> {
 }
 
 pub mod api {
+    use std::thread;
+
     use actix_web::{get, post, HttpResponse, Responder, web::{Json, Path}};
     use serde::{Deserialize, Serialize};
     use utoipa::{ToSchema};
@@ -107,7 +111,8 @@ pub mod api {
     #[utoipa::path(
         request_body = CreateNodeRequest,
         responses(
-            (status = 200, description = "Create a new node", body = String)
+            (status = 200, description = "Create a new node", body = String),
+            (status = 404, description = "Simulation not found", body = String)
         )
     )]
     #[post("/create_node")]
@@ -115,10 +120,14 @@ pub mod api {
         let create_node_req = req.into_inner();
         unsafe {
             // TODO: Get the simulation object from a database and do not use a static global unsafe variable
-            let sim = SIM.as_mut().unwrap();
-            sim.create_node(create_node_req.name)
+            match SIM.as_mut() {
+                Some(s) => { 
+                    s.create_node(create_node_req.name);
+                    HttpResponse::Ok().body("Created Node")
+                }
+                None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before creating a node")
+            }
         }
-        HttpResponse::Ok().body("Created Node")
     }
 
     // A request to create a new channel and add it to the simulation
@@ -132,7 +141,8 @@ pub mod api {
     #[utoipa::path(
         request_body = CreateChannelRequest,
         responses(
-            (status = 200, description = "Create a new channel", body = String)
+            (status = 200, description = "Create a new channel", body = String),
+            (status = 404, description = "Simulation not found", body = String)
         )
     )]
     #[post("/create_channel")]
@@ -140,10 +150,14 @@ pub mod api {
         let create_channel_req = req.into_inner();
         unsafe {
             // TODO: Get the simulation object from a database and do not use a static global unsafe variable
-            let sim = SIM.as_mut().unwrap();
-            sim.create_channel(create_channel_req.node1_name, create_channel_req.node2_name, create_channel_req.amount);
+            match SIM.as_mut() {
+                Some(s) => {
+                    s.create_channel(create_channel_req.node1_name, create_channel_req.node2_name, create_channel_req.amount);
+                    HttpResponse::Ok().body("Created Channel")
+                }
+                None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before creating a channel")
+            }
         }
-        HttpResponse::Ok().body("Created Channel")
     }
 
     // A request to create a new event and add it to the simulation
@@ -157,7 +171,8 @@ pub mod api {
     #[utoipa::path(
         request_body = CreateEventRequest,
         responses(
-            (status = 200, description = "Create a new event", body = String)
+            (status = 200, description = "Create a new event", body = String),
+            (status = 404, description = "Simulation not found", body = String)
         )
     )]
     #[post("/create_event")]
@@ -165,29 +180,33 @@ pub mod api {
         let create_event_req = req.into_inner();
         unsafe {
             // TODO: Get the simulation object from a database and do not use a static global unsafe variable
-            let sim = SIM.as_mut().unwrap();
-            // TODO: This will need to be much more generic and the request will need to only allow supported events
-            // This is for simplicity while creating a proof of concept
-            if create_event_req.event_type == "NodeOfflineEvent" {
-                sim.create_node_offline_event(create_event_req.node_name, create_event_req.time);
-            } else {
-                sim.create_node_online_event(create_event_req.node_name, create_event_req.time);
+            match SIM.as_mut() {
+                Some(s) => {
+                    // TODO: This will need to be much more generic and the request will need to only allow supported events
+                    // This is for simplicity while creating a proof of concept
+                    if create_event_req.event_type == "NodeOfflineEvent" {
+                        s.create_node_offline_event(create_event_req.node_name, create_event_req.time);
+                    } else {
+                        s.create_node_online_event(create_event_req.node_name, create_event_req.time);
+                    }
+                    HttpResponse::Ok().body("Event Created")
+                }
+                None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before creating an event")
             }
         }
-        HttpResponse::Ok().body("Event Created")
     }
 
     // A request to start the simulation
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct RunSimulationRequest {
         name: String
-
     }
 
     #[utoipa::path(
         request_body = RunSimulationRequest,
         responses(
-            (status = 200, description = "Run a simulation", body = String)
+            (status = 200, description = "Run a simulation", body = String),
+            (status = 404, description = "Simulation not found", body = String)
         )
     )]
     #[post("/run_sim")]
@@ -195,10 +214,14 @@ pub mod api {
         let run_sim_request = req.into_inner();
         unsafe {
             // TODO: Get the simulation object from a database and do not use a static global unsafe variable
-            let sim = SIM.as_mut().unwrap();
-            sim.run();
+            match SIM.as_mut() {
+                Some(s) => {
+                    thread::spawn(|| {s.run()});
+                    HttpResponse::Ok().body(String::from("Running Simulation: ") + &run_sim_request.name)
+                }
+                None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before running a simulation")
+            }
         }
-        HttpResponse::Ok().body(String::from("Running Simulation: ") + &run_sim_request.name)
     }
 
     // A request to import a network definition from a file
@@ -210,7 +233,8 @@ pub mod api {
     #[utoipa::path(
         request_body = ImportNetworkRequest,
         responses(
-            (status = 200, description = "Import a network definition from file", body = String)
+            (status = 200, description = "Import a network definition from file", body = String),
+            (status = 404, description = "Simulation not found", body = String)
         )
     )]
     #[post("/import_network")]
@@ -218,9 +242,13 @@ pub mod api {
         let import_request = req.into_inner();
         unsafe {
             // TODO: Get the simulation object from a database and do not use a static global unsafe variable
-            let sim = SIM.as_mut().unwrap();
-            sim.import_network(import_request.filename);
+            match SIM.as_mut() {
+                Some(s) => {
+                    s.import_network(import_request.filename);
+                    HttpResponse::Ok().body("Network Imported")
+                }
+                None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before importing a network definition")
+            }   
         }
-        HttpResponse::Ok().body("Network Imported")
     }
 }
