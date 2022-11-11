@@ -8,25 +8,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Install nigiri
-        run: sudo curl https://getnigiri.vulpem.com | bash
-      - name: Run nigiri
-        run: nigiri start
-      - name: Check nigiri
-        run: docker ps -a
-      - name: Check nigiri 2
-        run: cat ~/.nigiri/volumes/bitcoin/bitcoin.conf
-      - name: Stop nigiri
-        run: nigiri stop
-      #- name: Checkout ln-ms-framework
-      #  uses: actions/checkout@v3
-      #  with:
-      #    fetch-depth: 1
-      #    submodules: false
-      #    path: ln-ms-framework
-      #- name: Build
-      #  run: cargo build
-      #  working-directory: ln-ms-framework/ln_ms_server
-      #- name: Test
-      #  run: cargo test
-      #  working-directory: ln-ms-framework/ln_ms_lib
+      - name: Run Nigiri
+        uses: vulpemventures/nigiri-github-action@master
+        with:
+          use_liquid: false
+      - name: Checkout ln-ms-framework
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+          submodules: false
+          path: ln-ms-framework
+      - name: Build
+        run: cargo build
+        working-directory: ln-ms-framework/ln_ms_server
+      - name: Test
+        run: cargo test
+        working-directory: ln-ms-framework/ln_ms_lib
