@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Run Nigiri
+      - name: Run nigiri
         uses: vulpemventures/nigiri-github-action@master
         with:
           use_liquid: false

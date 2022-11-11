@@ -79,6 +79,7 @@ impl LnSimulation {
         let sqlite_path = sensei_data_dir.clone() + "/" + config.database_url.as_str();
         config.database_url = format!("sqlite://{}?mode=rwc", sqlite_path);
         let stop_signal = Arc::new(AtomicBool::new(false));
+        let sensei_data_dir_main = sensei_data_dir.clone();
 
         println!("sensei data: {}", sensei_data_dir);
         println!("sensei config file: {}", sensei_config_file);
@@ -272,11 +273,11 @@ impl LnSimulation {
         });
 
         // Clean up sensei data after the simulation is done
-        fs::remove_file("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/sensei_data_dir/sensei.db").expect("File delete failed");
-        fs::remove_file("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/sensei_data_dir/sensei.db-shm").expect("File delete failed");
-        fs::remove_file("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/sensei_data_dir/sensei.db-wal").expect("File delete failed");
-        fs::remove_dir_all("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/sensei_data_dir/logs").expect("File delete failed");
-        fs::remove_dir_all("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/sensei_data_dir/regtest").expect("File delete failed");
+        fs::remove_file(sensei_data_dir_main.clone() + "/sensei.db").expect("File delete failed");
+        fs::remove_file(sensei_data_dir_main.clone() + "/sensei.db-shm").expect("File delete failed");
+        fs::remove_file(sensei_data_dir_main.clone() + "/sensei.db-wal").expect("File delete failed");
+        fs::remove_dir_all(sensei_data_dir_main.clone() + "/logs").expect("File delete failed");
+        fs::remove_dir_all(sensei_data_dir_main.clone() + "/regtest").expect("File delete failed");
 
         Ok(())
     }
