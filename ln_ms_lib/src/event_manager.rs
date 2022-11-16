@@ -1,4 +1,4 @@
-use crate::ln_event::SimulationEvent;
+use crate::event::SimulationEvent;
 
 use std::collections::HashMap;
 use std::{thread, time};
@@ -6,13 +6,13 @@ use std::sync::mpsc;
 
 // This struct holds all of the events that will take place over the duration of the simulation
 #[derive(Clone)]
-pub struct LnEventManager {
+pub struct SimEventManager {
     pub events: HashMap<u64, Vec<SimulationEvent>> 
 }
 
-impl LnEventManager {
+impl SimEventManager {
     pub fn new() -> Self {
-        let em = LnEventManager {
+        let em = SimEventManager {
             events: HashMap::new()
         };
 
@@ -27,7 +27,7 @@ impl LnEventManager {
     // longer durations and at a faster-than-real-time rate
 
     pub fn run(&self, duration: u64, event_channel: mpsc::Sender<SimulationEvent>) {
-        println!("LnEventManager:{} -- running LnEventManager for {} seconds", crate::get_current_time(), duration);
+        println!("SimEventManager:{} -- running SimEventManager for {} seconds", crate::get_current_time(), duration);
         let one_sec = time::Duration::from_secs(1);
         let mut current_sec = 0;
         while current_sec <= duration {

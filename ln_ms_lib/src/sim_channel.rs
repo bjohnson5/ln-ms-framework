@@ -1,5 +1,5 @@
 // This struct represents all of the channels defined in the simuation
-pub struct LnChannel {
+pub struct SimChannel {
     pub node1: String,
     pub node2: String,
     pub node1_balance: i32,

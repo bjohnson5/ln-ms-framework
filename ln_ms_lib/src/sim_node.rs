@@ -1,3 +1,3 @@
-pub struct LnNode {
+pub struct SimNode {
     pub name: String
 }

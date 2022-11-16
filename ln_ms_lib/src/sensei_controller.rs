@@ -1,4 +1,4 @@
-use crate::ln_event::SimulationEvent;
+use crate::event::SimulationEvent;
 
 use std::sync::Arc;
 use std::sync::atomic::{Ordering};
@@ -8,14 +8,14 @@ use senseicore::services::admin::{AdminRequest, AdminResponse, AdminService};
 use entity::node;
 
 #[derive(Clone)]
-pub struct LnSenseiController {
+pub struct SenseiController {
     sensei_admin_service: Arc<AdminService>,
     sensei_runtime_handle: tokio::runtime::Handle
 }
 
-impl LnSenseiController {
+impl SenseiController {
     pub fn new(sas: Arc<AdminService>, runtime_handle: tokio::runtime::Handle) -> Self {
-        let sc = LnSenseiController {
+        let sc = SenseiController {
             sensei_admin_service: sas,
             sensei_runtime_handle: runtime_handle
         };
@@ -29,7 +29,7 @@ impl LnSenseiController {
                 for event in event_channel {
                     match event {
                         SimulationEvent::NodeOfflineEvent(name) => {
-                            println!("LnSenseiController:{} -- running a NodeOffline event for {}", crate::get_current_time(), name);
+                            println!("SenseiController:{} -- running a NodeOffline event for {}", crate::get_current_time(), name);
                             match self.get_sensei_node(name.clone()).await {
                                 Some(model) => {
                                     let id = String::from(model.id);
@@ -50,7 +50,7 @@ impl LnSenseiController {
                             }
                         },
                         SimulationEvent::NodeOnlineEvent(name) => {
-                            println!("LnSenseiController:{} -- running a NodeOnline event for {}", crate::get_current_time(), name);
+                            println!("SenseiController:{} -- running a NodeOnline event for {}", crate::get_current_time(), name);
                             match self.get_sensei_node(name.clone()).await {
                                 Some(model) => {
                                     let id = String::from(model.id);
@@ -72,7 +72,7 @@ impl LnSenseiController {
                             }
                         },
                         SimulationEvent::SimulationEnded => {
-                            println!("LnSenseiController:{} -- Simulation has ended", crate::get_current_time());
+                            println!("SenseiController:{} -- Simulation has ended", crate::get_current_time());
                             self.sensei_admin_service.stop_signal.store(true, Ordering::Release);
                             let _res = self.sensei_admin_service.stop().await;                          
                             break;

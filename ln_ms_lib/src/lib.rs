@@ -1,15 +1,15 @@
-mod ln_node;
-mod ln_channel;
-mod ln_event;
-mod ln_event_manager;
-mod ln_sensei_controller;
+mod sim_node;
+mod sim_channel;
+mod event;
+mod event_manager;
+mod sensei_controller;
 
 // Project Modules
-use ln_node::LnNode;
-use ln_event_manager::LnEventManager;
-use ln_channel::LnChannel;
-use ln_event::SimulationEvent;
-use ln_sensei_controller::LnSenseiController;
+use sim_node::SimNode;
+use event_manager::SimEventManager;
+use sim_channel::SimChannel;
+use event::SimulationEvent;
+use sensei_controller::SenseiController;
 
 // Standard Modules
 use std::collections::HashMap;
@@ -49,17 +49,17 @@ use senseicore::{
 pub struct LnSimulation {
     name: String,
     duration: u64,
-    em: LnEventManager,
-    nodes: HashMap<String, LnNode>,
-    channels: Vec<LnChannel>,
+    em: SimEventManager,
+    nodes: HashMap<String, SimNode>,
+    channels: Vec<SimChannel>
 }
 
 impl LnSimulation {
     pub fn new(name: String, dur: u64) -> Self {
         let sim = LnSimulation {
             name: name,
-            duration: dur, 
-            em: LnEventManager::new(),
+            duration: dur,
+            em: SimEventManager::new(),
             nodes: HashMap::new(),
             channels: Vec::new(),
         };
@@ -234,7 +234,7 @@ impl LnSimulation {
             // Start the SenseiController
             println!("starting the sensei controller...");
             //let sensei_admin_service = sas.clone();
-            let sensei_controller = Arc::new(LnSenseiController::new(sas, sensei_runtime_handle));
+            let sensei_controller = Arc::new(SenseiController::new(sas, sensei_runtime_handle));
             let sensei_controller_handle = thread::spawn(move || {
                 sensei_controller.process_events(event_receiver);
             });
@@ -293,7 +293,7 @@ impl LnSimulation {
     pub fn create_node(&mut self, name: String) {
         println!("LnSimulation:{} -- create Node: {}", get_current_time(), name);
         let name_key = name.clone();
-        let node = LnNode {
+        let node = SimNode {
             name: name
         };
         self.nodes.insert(name_key, node);
@@ -302,7 +302,7 @@ impl LnSimulation {
     // Open a channel between two lightweight nodes in the simulated network
     pub fn create_channel(&mut self, node1_name: String, node2_name: String, amount: i32) {
         println!("LnSimulation:{} -- open Channel: {} -> {} for {} sats", get_current_time(), node1_name, node2_name, amount);
-        let channel1 = LnChannel {
+        let channel1 = SimChannel {
             node1: node1_name,
             node2: node2_name,
             node1_balance: amount,
