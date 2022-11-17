@@ -1,14 +1,14 @@
 mod sim_node;
 mod sim_channel;
-mod event;
-mod event_manager;
+mod sim_event;
+mod sim_event_manager;
 mod sensei_controller;
 
 // Project Modules
 use sim_node::SimNode;
-use event_manager::SimEventManager;
+use sim_event_manager::SimEventManager;
 use sim_channel::SimChannel;
-use event::SimulationEvent;
+use sim_event::SimulationEvent;
 use sensei_controller::SenseiController;
 
 // Standard Modules
@@ -49,7 +49,7 @@ use senseicore::{
 pub struct LnSimulation {
     name: String,
     duration: u64,
-    em: SimEventManager,
+    sim_event_manager: SimEventManager,
     nodes: HashMap<String, SimNode>,
     channels: Vec<SimChannel>
 }
@@ -59,7 +59,7 @@ impl LnSimulation {
         let sim = LnSimulation {
             name: name,
             duration: dur,
-            em: SimEventManager::new(),
+            sim_event_manager: SimEventManager::new(),
             nodes: HashMap::new(),
             channels: Vec::new(),
         };
@@ -113,8 +113,8 @@ impl LnSimulation {
 
         // Initialize sensei and the simulation
         simulation_runtime.block_on(async move {
-            // Start bitcoin client with nigiri
-            println!("starting bitcoin with nigiri...");
+            // Start bitcoind with nigiri
+            println!("starting bitcoind with nigiri...");
             Command::new("sh")
             .arg("-c")
             .arg("nigiri start")
@@ -136,7 +136,7 @@ impl LnSimulation {
             database.mark_all_nodes_stopped().await.unwrap();
 
             // Initialize the bitcoin client
-            println!("connecting to bitcoin client...");
+            println!("connecting to bitcoind...");
             let bitcoind_client = Arc::new(
                 BitcoindClient::new(
                     config.bitcoind_rpc_host.clone(),
@@ -146,7 +146,7 @@ impl LnSimulation {
                     tokio::runtime::Handle::current(),
                 )
                 .await
-                .expect("invalid bitcoind rpc config"),
+                .expect("could not connect to to bitcoind"),
             );
 
             // Initialize the chain manager
@@ -159,23 +159,19 @@ impl LnSimulation {
                     bitcoind_client,
                 )
                 .await
-                .unwrap(),
+                .expect("could not initialize the sensei chain manager"),
             );
 
             // Initialize the admin service
             println!("initializing the sensei admin service...");
-            let (event_sender, _event_receiver): (
-                broadcast::Sender<SenseiEvent>,
-                broadcast::Receiver<SenseiEvent>,
-            ) = broadcast::channel(1024);
-
+            let (sensei_event_sender, _event_receiver): (broadcast::Sender<SenseiEvent>, broadcast::Receiver<SenseiEvent>) = broadcast::channel(1024);
             let sas = Arc::new(
                 AdminService::new(
                     &sensei_data_dir,
                     config.clone(),
                     database,
                     chain_manager,
-                    event_sender,
+                    sensei_event_sender,
                     tokio::runtime::Handle::current(),
                     stop_signal.clone(),
                 )
@@ -221,7 +217,7 @@ impl LnSimulation {
 
             // Create the channel for threads to communicate over
             // TODO: make this a broadcast channel (many senders and many receivers) so that the analyzer thread also sees events and transaction generator can also send events
-            let (event_sender, event_receiver) = mpsc::channel();
+            let (sim_event_sender, sim_event_receiver) = mpsc::channel();
 
             // TODO: Start the TransactionGenerator
             // This thread will generate simulated network traffic
@@ -236,7 +232,7 @@ impl LnSimulation {
             //let sensei_admin_service = sas.clone();
             let sensei_controller = Arc::new(SenseiController::new(sas, sensei_runtime_handle));
             let sensei_controller_handle = thread::spawn(move || {
-                sensei_controller.process_events(event_receiver);
+                sensei_controller.process_events(sim_event_receiver);
             });
 
             // Start the EventManager
@@ -247,10 +243,10 @@ impl LnSimulation {
             // run at faster-than-real-time pace so that long simulations can be modeled.
             // TODO: if this simulation was built to simply spin up a big network and allow manual testing, do not start the event manager
 
-            let event_manager = Arc::new(self.em.clone());
+            let event_manager = Arc::new(self.sim_event_manager.clone());
             let d = self.duration;
             let event_manager_handle = thread::spawn(move || {
-                event_manager.run(d, event_sender);
+                event_manager.run(d, sim_event_sender);
             });
 
             // Wait for all threads to finish and stop the sensei admin service
@@ -263,8 +259,8 @@ impl LnSimulation {
                 Err(_) => println!("sensei controller could not be stopped...")
             }
 
-            // Stop bitcoin client with nigiri
-            println!("stopping bitcoin with nigiri...");
+            // Stop bitcoind with nigiri
+            println!("stopping bitcoind with nigiri...");
             Command::new("sh")
             .arg("-c")
             .arg("nigiri stop --delete")
@@ -318,14 +314,14 @@ impl LnSimulation {
     pub fn create_node_online_event(&mut self, name: String, time: u64) {
         println!("LnSimulation:{} -- add NodeOnlineEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = SimulationEvent::NodeOnlineEvent(name);
-        self.em.add_event(event, time);
+        self.sim_event_manager.add_event(event, time);
     }
 
     // Create an event that will shut down a node in the simulated network
     pub fn create_node_offline_event(&mut self, name: String, time: u64) {
         println!("LnSimulation:{} -- add NodeOfflineEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = SimulationEvent::NodeOfflineEvent(name);
-        self.em.add_event(event, time);
+        self.sim_event_manager.add_event(event, time);
     }
 }
 
@@ -352,7 +348,7 @@ mod tests {
 
         assert_eq!(ln_sim.channels.len(), 1);
         assert_eq!(ln_sim.nodes.len(), 2);
-        assert_eq!(ln_sim.em.events.len(), 3);
+        assert_eq!(ln_sim.sim_event_manager.events.len(), 3);
 
         // Start the simulation
         let success = ln_sim.run();

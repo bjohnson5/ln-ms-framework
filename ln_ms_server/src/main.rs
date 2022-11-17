@@ -1,3 +1,4 @@
+// External Modules
 use actix_web::{App, HttpServer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{SwaggerUi, Url};
@@ -53,12 +54,16 @@ async fn main() -> std::io::Result<()> {
 }
 
 pub mod api {
+    // Project Modules
+    use ln_ms_lib::LnSimulation;
+
+    // Standard Modules
     use std::thread;
 
+    // External Modules
     use actix_web::{get, post, HttpResponse, Responder, web::{Json, Path}};
     use serde::{Deserialize, Serialize};
     use utoipa::{ToSchema};
-    use ln_ms_lib::LnSimulation;
 
     // TODO: This will not be a global variable, each endpoint will get the LnSimulation object from the database
     // For simplicity it will be used as a global variable right now in order to demonstate the use case
@@ -69,7 +74,7 @@ pub mod api {
             ("sim_name", description = "The name of the simulation to get information about")
         ),
         responses(
-            (status = 200, description = "Get information about a simulation", body = String),
+            (status = 200, description = "Information about a simulation", body = String),
         )
     )]
     #[get("/get_sim/{sim_name}")]
@@ -89,7 +94,7 @@ pub mod api {
     #[utoipa::path(
         request_body = CreateSimRequest,
         responses(
-            (status = 200, description = "Create a new simulation", body = String)
+            (status = 200, description = "Successfully created a new simulation", body = String)
         )
     )]
     #[post("/create_sim")]
@@ -111,7 +116,7 @@ pub mod api {
     #[utoipa::path(
         request_body = CreateNodeRequest,
         responses(
-            (status = 200, description = "Create a new node", body = String),
+            (status = 200, description = "Successfully created a new node", body = String),
             (status = 404, description = "Simulation not found", body = String)
         )
     )]
@@ -141,7 +146,7 @@ pub mod api {
     #[utoipa::path(
         request_body = CreateChannelRequest,
         responses(
-            (status = 200, description = "Create a new channel", body = String),
+            (status = 200, description = "Successfully created a new channel", body = String),
             (status = 404, description = "Simulation not found", body = String)
         )
     )]
@@ -171,7 +176,7 @@ pub mod api {
     #[utoipa::path(
         request_body = CreateEventRequest,
         responses(
-            (status = 200, description = "Create a new event", body = String),
+            (status = 200, description = "Successfully created a new event", body = String),
             (status = 404, description = "Simulation not found", body = String)
         )
     )]
@@ -205,7 +210,7 @@ pub mod api {
     #[utoipa::path(
         request_body = RunSimulationRequest,
         responses(
-            (status = 200, description = "Run a simulation", body = String),
+            (status = 200, description = "Successfully started a simulation", body = String),
             (status = 404, description = "Simulation not found", body = String)
         )
     )]
@@ -233,7 +238,7 @@ pub mod api {
     #[utoipa::path(
         request_body = ImportNetworkRequest,
         responses(
-            (status = 200, description = "Import a network definition from file", body = String),
+            (status = 200, description = "Network successfully imported", body = String),
             (status = 404, description = "Simulation not found", body = String)
         )
     )]

@@ -1,5 +1,7 @@
-use crate::event::SimulationEvent;
+// Project Modules
+use crate::sim_event::SimulationEvent;
 
+// Standard Modules
 use std::collections::HashMap;
 use std::{thread, time};
 use std::sync::mpsc;
@@ -12,11 +14,11 @@ pub struct SimEventManager {
 
 impl SimEventManager {
     pub fn new() -> Self {
-        let em = SimEventManager {
+        let event_manager = SimEventManager {
             events: HashMap::new()
         };
 
-        em
+        event_manager
     }
 
     // TODO: This function will need to execute in its own thread
@@ -26,6 +28,7 @@ impl SimEventManager {
     // TODO: This function is based on seconds and runs at real time, eventually it will need to be able to run for
     // longer durations and at a faster-than-real-time rate
 
+    // Send SimulationEvent objects through the event channel at the correct simulation time
     pub fn run(&self, duration: u64, event_channel: mpsc::Sender<SimulationEvent>) {
         println!("SimEventManager:{} -- running SimEventManager for {} seconds", crate::get_current_time(), duration);
         let one_sec = time::Duration::from_secs(1);
@@ -36,17 +39,17 @@ impl SimEventManager {
                 let current_events = &self.events[&current_sec];
                 let current_events_iter = current_events.iter();
                 for e in current_events_iter {
-                    event_channel.send(e.clone()).expect("could not send");
+                    event_channel.send(e.clone()).expect("could not send the event");
                 }
             }
 
             current_sec += 1;
             thread::sleep(one_sec);
         }
-        event_channel.send(SimulationEvent::SimulationEnded).expect("could not send");
+        event_channel.send(SimulationEvent::SimulationEnded).expect("could not send the simulation ended event");
     }
 
-    // Add LnEvent object to the list of events to execute
+    // Add a SimulationEvent to the list of events to execute
     pub fn add_event(&mut self, event: SimulationEvent, time: u64) {
         if self.events.contains_key(&time) {
             let current_events = self.events.get_mut(&time).unwrap();

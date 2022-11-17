@@ -1,4 +1,4 @@
-// This struct represents all of the channels defined in the simuation
+// This struct represents a channel defined in the simuation
 pub struct SimChannel {
     pub node1: String,
     pub node2: String,

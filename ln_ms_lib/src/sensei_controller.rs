@@ -1,11 +1,16 @@
-use crate::event::SimulationEvent;
+// Project modules
+use crate::sim_event::SimulationEvent;
 
+// Standard modules
 use std::sync::Arc;
 use std::sync::atomic::{Ordering};
 use std::sync::mpsc;
 
+// Sensei modules
 use senseicore::services::admin::{AdminRequest, AdminResponse, AdminService};
 use entity::node;
+
+// This struct holds the Sensei Admin Service and will process simulation events by controlling the Sensei nodes in the network
 
 #[derive(Clone)]
 pub struct SenseiController {
@@ -14,15 +19,16 @@ pub struct SenseiController {
 }
 
 impl SenseiController {
-    pub fn new(sas: Arc<AdminService>, runtime_handle: tokio::runtime::Handle) -> Self {
-        let sc = SenseiController {
-            sensei_admin_service: sas,
+    pub fn new(admin: Arc<AdminService>, runtime_handle: tokio::runtime::Handle) -> Self {
+        let controller = SenseiController {
+            sensei_admin_service: admin,
             sensei_runtime_handle: runtime_handle
         };
 
-        sc
+        controller
     }
 
+    // The process_events function will receive events and make the appropriate calls to the Sensei Admin Service
     pub fn process_events(&self, event_channel: mpsc::Receiver<SimulationEvent>) {
         tokio::task::block_in_place(move || {
             self.sensei_runtime_handle.block_on(async move { 
@@ -83,6 +89,7 @@ impl SenseiController {
         });
     }
 
+    // Gets a sensei node from the database by username and returns an Option (None if the node was not found in the database)
     pub async fn get_sensei_node(&self, username: String) -> Option<node::Model> {
         let db_node = self.sensei_admin_service
         .database
