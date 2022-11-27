@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Network Monitor</title>
+
+    <script src="/static/jquery.js"></script>
+    <script src="/static/cytoscape.js"></script>
+
+    <style type="text/css">
+      #mynetwork {
+        width: 1200px;
+        height: 800px;
+        border: 1px solid lightgray;
+      }
+    </style>
+  </head>
+  <body>
+    <p>Simulation Network Graph:</p>
+
+    <div id="mynetwork"></div>
+
+    <script type="text/javascript">
+        var cy = cytoscape({
+
+        container: document.getElementById('mynetwork'), // container to render in
+
+        style: [ // the stylesheet for the graph
+        {
+            selector: 'node',
+            style: {
+            'label': 'data(id)'
+            }
+        },
+        {
+            selector: 'edge',
+            style: {
+            'width': 3,
+            'line-color': '#ccc',
+            'curve-style': 'bezier'
+            }
+        }
+        ],
+        });
+
+      function worker() {
+        $.ajax({
+            type: "GET",
+            url: "get_network/string",
+            dataType: "json",
+            async: false,
+            success: function (result) {
+              // add new nodes
+              var result_nodes = result.nodes;
+              $.each(JSON.parse(result_nodes), function (index, item) {
+                    var el = cy.getElementById(item.name);
+                    if (el.length == 0) {
+                        cy.add({group: 'nodes', data:{ id: item.name, running: item.running }});
+                    } else {
+                      el.data('running', item.running);
+                    }
+                });
+
+              // remove nodes
+              cy.nodes().forEach(element => {
+                var needRemove = true;
+                $.each(JSON.parse(result_nodes), function (index, item) {
+                    if (item.name == element.data().id) {
+                        needRemove = false;
+                    }
+                });
+                if (needRemove) {
+                    element.remove();
+                }
+              });
+
+              cy.nodes('[?running]').style('background-color', 'green');
+              cy.nodes('[!running]').style('background-color', 'red');
+
+              // add new channels
+              var result_channels = result.channels;
+              $.each(JSON.parse(result_channels), function(index, item) {
+                var el = cy.getElementById(item.node1+item.node2);
+                if (el.length == 0) {
+                    cy.add({group: 'edges', data:{ id: item.node1+item.node2, source: item.node1, target: item.node2 }});
+                }
+              });
+
+              // remove channels
+              cy.edges().forEach(element => {
+                var needRemove = true;
+                $.each(JSON.parse(result_channels), function (index, item) {
+                    if (item.node1+item.node2 == element.data().id) {
+                        needRemove = false;
+                    }
+                });
+                if (needRemove) {
+                    element.remove();
+                }
+              });
+
+              var layout = cy.layout({
+                name: 'circle'
+              });
+              layout.run();
+            },
+            error: function (err) {
+              alert(err.status + " : " + err.statusText);
+            },
+            complete: function() {
+              setTimeout(worker, 1000);
+            }
+        });
+      }
+      $(document).ready(function(){
+        setTimeout(worker,1000);
+      });
+    </script>
+  </body>
+</html>

@@ -1,14 +1,18 @@
+// Project Modules
 mod sim_node;
 mod sim_channel;
 mod sim_event;
 mod sim_event_manager;
+mod sim_runtime_graph;
+mod sim_utils;
 mod sensei_controller;
 
-// Project Modules
 use sim_node::SimNode;
 use sim_event_manager::SimEventManager;
 use sim_channel::SimChannel;
 use sim_event::SimulationEvent;
+use sim_runtime_graph::RuntimeNetworkGraph;
+use sim_utils::get_current_time;
 use sensei_controller::SenseiController;
 
 // Standard Modules
@@ -19,15 +23,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool};
 use std::process::Command;
 use std::thread;
-use std::sync::mpsc;
 
 // External Modules
-extern crate chrono;
-use chrono::Local;
 use anyhow::Result;
 use tokio::runtime::Builder;
 use tokio::sync::broadcast;
 use sea_orm::{Database, ConnectOptions};
+use serde_json::Map;
 
 // Sensei Modules
 use migration::{Migrator, MigratorTrait};
@@ -49,9 +51,10 @@ use senseicore::{
 pub struct LnSimulation {
     name: String,
     duration: u64,
-    sim_event_manager: SimEventManager,
+    events: HashMap<u64, Vec<SimulationEvent>>,
     nodes: HashMap<String, SimNode>,
-    channels: Vec<SimChannel>
+    channels: Vec<SimChannel>,
+    network_graph: RuntimeNetworkGraph
 }
 
 impl LnSimulation {
@@ -59,15 +62,16 @@ impl LnSimulation {
         let sim = LnSimulation {
             name: name,
             duration: dur,
-            sim_event_manager: SimEventManager::new(),
+            events: HashMap::new(),
             nodes: HashMap::new(),
             channels: Vec::new(),
+            network_graph: RuntimeNetworkGraph::new()
         };
 
         sim
     }
 
-    pub fn run(&self) -> Result<()> {
+    pub fn run(&mut self) -> Result<()> {
         println!("LnSimulation:{} -- running simulation: {} ({} seconds)", get_current_time(), self.name, self.duration);
 
         // Setup the sensei config
@@ -165,7 +169,7 @@ impl LnSimulation {
             // Initialize the admin service
             println!("initializing the sensei admin service...");
             let (sensei_event_sender, _event_receiver): (broadcast::Sender<SenseiEvent>, broadcast::Receiver<SenseiEvent>) = broadcast::channel(1024);
-            let sas = Arc::new(
+            let sensei_admin_service = Arc::new(
                 AdminService::new(
                     &sensei_data_dir,
                     config.clone(),
@@ -189,7 +193,7 @@ impl LnSimulation {
                     entropy: None,
                     cross_node_entropy: None,
                 };
-                match sas.call(create_node_req).await {
+                match sensei_admin_service.call(create_node_req).await {
                     Ok(response) => match response {
                         AdminResponse::CreateNode {        
                             pubkey,
@@ -215,24 +219,30 @@ impl LnSimulation {
             // TODO: start the nodes that are marked to be online at the start of the simulation
             println!("starting initial nodes...");
 
+            // Set up the initial runtime network graph
+            println!("initializing the runtime network graph...");
+            self.network_graph.update(&self.nodes, &self.channels);
+
             // Create the channel for threads to communicate over
-            // TODO: make this a broadcast channel (many senders and many receivers) so that the analyzer thread also sees events and transaction generator can also send events
-            let (sim_event_sender, sim_event_receiver) = mpsc::channel();
+            let (sim_event_sender, _): (broadcast::Sender<SimulationEvent>, broadcast::Receiver<SimulationEvent>) = broadcast::channel(1024);
+            let sensei_event_receiver = sim_event_sender.subscribe();
+            let ln_simulation_receiver = sim_event_sender.subscribe();
 
             // TODO: Start the TransactionGenerator
+            // TODO: Clone the sim_event_sender and pass to transaction generator so that it can send events
             // This thread will generate simulated network traffic
             println!("starting the transaction generator...");
 
             // TODO: Start the Analyzer
+            // TODO: Create anoter event receiver and pass to the analyzer so that it can receive events
             // This thread will watch the network and gather stats and data about it that will be reported at the end of the sim
             println!("starting the network analyzer...");
 
             // Start the SenseiController
             println!("starting the sensei controller...");
-            //let sensei_admin_service = sas.clone();
-            let sensei_controller = Arc::new(SenseiController::new(sas, sensei_runtime_handle));
+            let sensei_controller = Arc::new(SenseiController::new(sensei_admin_service, sensei_runtime_handle));
             let sensei_controller_handle = thread::spawn(move || {
-                sensei_controller.process_events(sim_event_receiver);
+                sensei_controller.process_events(sensei_event_receiver);
             });
 
             // Start the EventManager
@@ -242,12 +252,15 @@ impl LnSimulation {
             // the duration is denoted in seconds and will run in real time. Eventually this will need to be a longer duration that gets
             // run at faster-than-real-time pace so that long simulations can be modeled.
             // TODO: if this simulation was built to simply spin up a big network and allow manual testing, do not start the event manager
-
-            let event_manager = Arc::new(self.sim_event_manager.clone());
+            let event_manager = SimEventManager::new(self.events.clone());
+            let event_manager_arc = Arc::new(event_manager.clone());
             let d = self.duration;
             let event_manager_handle = thread::spawn(move || {
-                event_manager.run(d, sim_event_sender);
+                event_manager_arc.run(d, sim_event_sender);
             });
+
+            // Let the LnSimulation object wait and listen for events
+            self.listen(ln_simulation_receiver).await;
 
             // Wait for all threads to finish and stop the sensei admin service
             match event_manager_handle.join() {
@@ -258,6 +271,10 @@ impl LnSimulation {
                 Ok(()) => println!("sensei controller stopped..."),
                 Err(_) => println!("sensei controller could not be stopped...")
             }
+
+            // Clear the runtime network graph
+            self.network_graph.nodes.clear();
+            self.network_graph.channels.clear();
 
             // Stop bitcoind with nigiri
             println!("stopping bitcoind with nigiri...");
@@ -278,6 +295,49 @@ impl LnSimulation {
         Ok(())
     }
 
+    // Listens for simulation events and updates the runtime network graph
+    pub async fn listen(&mut self, mut event_channel: broadcast::Receiver<SimulationEvent>) {
+        let mut running = true;
+        while running {
+            let event = event_channel.recv().await.unwrap();
+            match event {
+                SimulationEvent::NodeOfflineEvent(name) => {
+                    println!("LnSimulation:{} -- NodeOfflineEvent, updating network graph", get_current_time());
+                    for node in &mut self.network_graph.nodes {
+                        if node.name == name {
+                            node.running = false;
+                            break;
+                        }
+                    }
+                },
+                SimulationEvent::NodeOnlineEvent(name) => {
+                    println!("LnSimulation:{} -- NodeOnlineEvent, updating network graph", get_current_time());
+                    for node in &mut self.network_graph.nodes {
+                        if node.name == name {
+                            node.running = true;
+                            break;
+                        }
+                    }
+                },
+                SimulationEvent::SimulationEnded => {
+                    println!("LnSimulation:{} -- SimulationEnded", get_current_time());
+                    running = false;
+                }
+            }
+        }
+    }
+
+    // Get the current network graph for the simulation
+    pub fn get_runtime_network_graph(&self) -> String {
+        println!("LnSimulation:{} -- get current runtime network graph", get_current_time());
+        let serialized_nodes = serde_json::to_string(&self.network_graph.nodes).unwrap();
+        let serialized_channels = serde_json::to_string(&self.network_graph.channels).unwrap();
+        let mut map = Map::new();
+        map.insert(String::from("nodes"), serde_json::Value::String(serialized_nodes));
+        map.insert(String::from("channels"), serde_json::Value::String(serialized_channels));
+        serde_json::to_string(&map).unwrap()
+    }
+
     // Parse a file that contains a definition of a LN topology
     // This definition could be from a project like Polar or from dumping the network information from the mainnet
     pub fn import_network(&self, filename: String) {
@@ -285,12 +345,19 @@ impl LnSimulation {
         // TODO: Implement
     }
 
+    // Export the network to a json file that can be loaded later
+    pub fn export_network(&self, filename: String) {
+        println!("LnSimulation:{} -- exporting network definition from {}", get_current_time(), filename);
+        // TODO: Implement        
+    }
+
     // Create a lightweight node in the simulated network
     pub fn create_node(&mut self, name: String) {
         println!("LnSimulation:{} -- create Node: {}", get_current_time(), name);
         let name_key = name.clone();
         let node = SimNode {
-            name: name
+            name: name,
+            running: false
         };
         self.nodes.insert(name_key, node);
     }
@@ -314,20 +381,27 @@ impl LnSimulation {
     pub fn create_node_online_event(&mut self, name: String, time: u64) {
         println!("LnSimulation:{} -- add NodeOnlineEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = SimulationEvent::NodeOnlineEvent(name);
-        self.sim_event_manager.add_event(event, time);
+        self.add_event(event, time);
     }
 
     // Create an event that will shut down a node in the simulated network
     pub fn create_node_offline_event(&mut self, name: String, time: u64) {
         println!("LnSimulation:{} -- add NodeOfflineEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = SimulationEvent::NodeOfflineEvent(name);
-        self.sim_event_manager.add_event(event, time);
+        self.add_event(event, time);
     }
-}
 
-pub fn get_current_time() -> String {
-    let date = Local::now();
-    format!("{}", date.format("[%Y-%m-%d][%H:%M:%S]"))
+    // Add a SimulationEvent to the list of events to execute
+    pub fn add_event(&mut self, event: SimulationEvent, time: u64) {
+        if self.events.contains_key(&time) {
+            let current_events = self.events.get_mut(&time).unwrap();
+            current_events.push(event);
+        } else {
+            let mut current_events: Vec<SimulationEvent> = Vec::new();
+            current_events.push(event);
+            self.events.insert(time, current_events);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -348,7 +422,7 @@ mod tests {
 
         assert_eq!(ln_sim.channels.len(), 1);
         assert_eq!(ln_sim.nodes.len(), 2);
-        assert_eq!(ln_sim.sim_event_manager.events.len(), 3);
+        assert_eq!(ln_sim.events.len(), 3);
 
         // Start the simulation
         let success = ln_sim.run();

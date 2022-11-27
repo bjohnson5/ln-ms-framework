@@ -4,7 +4,7 @@ use crate::sim_event::SimulationEvent;
 // Standard modules
 use std::sync::Arc;
 use std::sync::atomic::{Ordering};
-use std::sync::mpsc;
+use tokio::sync::broadcast;
 
 // Sensei modules
 use senseicore::services::admin::{AdminRequest, AdminResponse, AdminService};
@@ -29,10 +29,12 @@ impl SenseiController {
     }
 
     // The process_events function will receive events and make the appropriate calls to the Sensei Admin Service
-    pub fn process_events(&self, event_channel: mpsc::Receiver<SimulationEvent>) {
+    pub fn process_events(&self, mut event_channel: broadcast::Receiver<SimulationEvent>) {
         tokio::task::block_in_place(move || {
-            self.sensei_runtime_handle.block_on(async move { 
-                for event in event_channel {
+            self.sensei_runtime_handle.block_on(async move {
+                let mut running = true;
+                while running {
+                    let event = event_channel.recv().await.unwrap();
                     match event {
                         SimulationEvent::NodeOfflineEvent(name) => {
                             println!("SenseiController:{} -- running a NodeOffline event for {}", crate::get_current_time(), name);
@@ -81,7 +83,7 @@ impl SenseiController {
                             println!("SenseiController:{} -- Simulation has ended", crate::get_current_time());
                             self.sensei_admin_service.stop_signal.store(true, Ordering::Release);
                             let _res = self.sensei_admin_service.stop().await;                          
-                            break;
+                            running = false;
                         }
                     }
                 }

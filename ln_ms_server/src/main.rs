@@ -1,4 +1,5 @@
 // External Modules
+use actix_files as fs;
 use actix_web::{App, HttpServer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{SwaggerUi, Url};
@@ -10,6 +11,7 @@ async fn main() -> std::io::Result<()> {
     #[openapi(
         paths(
             api::get_sim,
+            api::get_network,
             api::create_sim,
             api::create_node,
             api::create_channel,
@@ -30,10 +32,14 @@ async fn main() -> std::io::Result<()> {
     struct ApiDoc;
 
     println!("View simulation swagger api here: http://localhost:8080/swagger-ui/index.html");
+    println!("View simulated network here: http://localhost:8080/network_monitor");
 
     HttpServer::new(move || {
         App::new()
+            .service(fs::Files::new("/static", "./static").show_files_listing())
+            .service(api::network_monitor)
             .service(api::get_sim)
+            .service(api::get_network)
             .service(api::create_sim)
             .service(api::create_node)
             .service(api::create_channel)
@@ -61,9 +67,18 @@ pub mod api {
     use std::thread;
 
     // External Modules
-    use actix_web::{get, post, HttpResponse, Responder, web::{Json, Path}};
+    use actix_web::{get, post, HttpResponse, Responder, Result, web::{Json, Path}};
     use serde::{Deserialize, Serialize};
     use utoipa::{ToSchema};
+
+    // TODO: this is just for demonstration purposes and testing, a front end framework should be used to create the UI
+    #[get("/network_monitor")]
+    pub async fn network_monitor() -> Result<HttpResponse> {
+        // response
+        Ok(HttpResponse::Ok()
+            .content_type("text/html; charset=utf-8")
+            .body(include_str!("../static/network_monitor.html")))
+    }
 
     // TODO: This will not be a global variable, each endpoint will get the LnSimulation object from the database
     // For simplicity it will be used as a global variable right now in order to demonstate the use case
@@ -74,7 +89,7 @@ pub mod api {
             ("sim_name", description = "The name of the simulation to get information about")
         ),
         responses(
-            (status = 200, description = "Information about a simulation", body = String),
+            (status = 200, description = "Successfully got information about a simulation", body = String),
         )
     )]
     #[get("/get_sim/{sim_name}")]
@@ -82,6 +97,29 @@ pub mod api {
         let sim_name = sim_name.into_inner();
         let response = String::from("Simulation Name: ") + &sim_name;
         HttpResponse::Ok().body(response)
+    }
+
+    #[utoipa::path(
+        params(
+            ("sim_name", description = "The name of the simulation to get information about")
+        ),
+        responses(
+            (status = 200, description = "Successfully got information about a simulation network", body = String),
+        )
+    )]
+    #[get("/get_network/{sim_name}")]
+    pub async fn get_network(sim_name: Path<String>) -> impl Responder {
+        let _sim_name = sim_name.into_inner();
+        unsafe {
+            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            match SIM.as_ref() {
+                Some(s) => { 
+                    let network_json = s.get_runtime_network_graph();
+                    HttpResponse::Ok().content_type("text/json; charset=utf-8").body(network_json)
+                }
+                None => HttpResponse::Ok().body("")
+            }
+        }
     }
 
     // A request to create a new simulation

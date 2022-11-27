@@ -1,4 +1,7 @@
+use serde::{Serialize, Deserialize};
+
 // This struct represents a channel defined in the simuation
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimChannel {
     pub node1: String,
     pub node2: String,

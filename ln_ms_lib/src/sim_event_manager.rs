@@ -4,7 +4,9 @@ use crate::sim_event::SimulationEvent;
 // Standard Modules
 use std::collections::HashMap;
 use std::{thread, time};
-use std::sync::mpsc;
+
+
+use tokio::sync::broadcast;
 
 // This struct holds all of the events that will take place over the duration of the simulation
 #[derive(Clone)]
@@ -13,9 +15,9 @@ pub struct SimEventManager {
 }
 
 impl SimEventManager {
-    pub fn new() -> Self {
+    pub fn new(sim_events: HashMap<u64, Vec<SimulationEvent>>) -> Self {
         let event_manager = SimEventManager {
-            events: HashMap::new()
+            events: sim_events
         };
 
         event_manager
@@ -29,7 +31,7 @@ impl SimEventManager {
     // longer durations and at a faster-than-real-time rate
 
     // Send SimulationEvent objects through the event channel at the correct simulation time
-    pub fn run(&self, duration: u64, event_channel: mpsc::Sender<SimulationEvent>) {
+    pub fn run(&self, duration: u64, event_channel: broadcast::Sender<SimulationEvent>) {
         println!("SimEventManager:{} -- running SimEventManager for {} seconds", crate::get_current_time(), duration);
         let one_sec = time::Duration::from_secs(1);
         let mut current_sec = 0;
@@ -47,17 +49,5 @@ impl SimEventManager {
             thread::sleep(one_sec);
         }
         event_channel.send(SimulationEvent::SimulationEnded).expect("could not send the simulation ended event");
-    }
-
-    // Add a SimulationEvent to the list of events to execute
-    pub fn add_event(&mut self, event: SimulationEvent, time: u64) {
-        if self.events.contains_key(&time) {
-            let current_events = self.events.get_mut(&time).unwrap();
-            current_events.push(event);
-        } else {
-            let mut current_events: Vec<SimulationEvent> = Vec::new();
-            current_events.push(event);
-            self.events.insert(time, current_events);
-        }
     }
 }
