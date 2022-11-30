@@ -22,7 +22,7 @@ impl RuntimeNetworkGraph {
 
     pub fn update(&mut self, nodes: &HashMap<String, SimNode>, channels: &Vec<SimChannel>) {
         for (_,n) in nodes {
-            self.nodes.push(SimNode { name: String::from(&n.name), running: n.running });
+            self.nodes.push(SimNode { name: String::from(&n.name), initial_balance: n.initial_balance, running: n.running });
         }
         for c in channels {
             self.channels.push(SimChannel { node1: String::from(&c.node1), node2: String::from(&c.node2), node1_balance: c.node1_balance, node2_balance: c.node2_balance });

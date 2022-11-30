@@ -6,6 +6,7 @@ mod sim_event_manager;
 mod sim_runtime_graph;
 mod sim_utils;
 mod sensei_controller;
+mod nigiri_controller;
 
 use sim_node::SimNode;
 use sim_event_manager::SimEventManager;
@@ -14,6 +15,7 @@ use sim_event::SimulationEvent;
 use sim_runtime_graph::RuntimeNetworkGraph;
 use sim_utils::get_current_time;
 use sensei_controller::SenseiController;
+use nigiri_controller::NigiriController;
 
 // Standard Modules
 use std::collections::HashMap;
@@ -21,7 +23,6 @@ use std::time::Duration;
 use std::fs;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool};
-use std::process::Command;
 use std::thread;
 
 // External Modules
@@ -38,7 +39,7 @@ use senseicore::{
     config::SenseiConfig,
     database::SenseiDatabase,
     events::SenseiEvent,
-    services::admin::{AdminRequest, AdminResponse, AdminService},
+    services::admin::AdminService
 };
 
 // Represents a simuation of a lightning network that runs for a specified duration
@@ -119,11 +120,7 @@ impl LnSimulation {
         simulation_runtime.block_on(async move {
             // Start bitcoind with nigiri
             println!("starting bitcoind with nigiri...");
-            Command::new("sh")
-            .arg("-c")
-            .arg("nigiri start")
-            .output()
-            .expect("failed to execute process");
+            NigiriController::start();
 
             // Initialize the database
             println!("starting sensei database...");
@@ -182,42 +179,11 @@ impl LnSimulation {
                 .await,
             );
 
-            // Create the initial state of the network (nodes, channels, balances, etc...)
-            println!("create nodes...");
-            for n in &self.nodes {
-                let create_node_req = AdminRequest::CreateNode { 
-                    username: String::from(n.0), 
-                    alias: String::from(n.0), 
-                    passphrase: String::from(n.0), 
-                    start: false,
-                    entropy: None,
-                    cross_node_entropy: None,
-                };
-                match sensei_admin_service.call(create_node_req).await {
-                    Ok(response) => match response {
-                        AdminResponse::CreateNode {        
-                            pubkey,
-                            macaroon: _,
-                            listen_addr: _,
-                            listen_port: _,
-                            id: _,
-                            entropy: _,
-                            cross_node_entropy: _
-                        } => println!("node created successfully with pubkey: {}", pubkey),
-                        _ => println!("")
-                    },
-                    Err(_) => println!("node failed to be created...")
-                }
-            }
+            let sensei_controller = SenseiController::new(sensei_admin_service, sensei_runtime_handle);
 
-             // TODO: fund the lightning nodes with initial balances
-            println!("funding initial balances...");
-           
-            // TODO: open all initial channels
-            println!("create channels...");
-            
-            // TODO: start the nodes that are marked to be online at the start of the simulation
-            println!("starting initial nodes...");
+            // Create the initial state of the network (nodes, channels, balances, etc...)
+            println!("initializing sensei network...");
+            sensei_controller.initialize_network(&self.nodes).await;
 
             // Set up the initial runtime network graph
             println!("initializing the runtime network graph...");
@@ -240,9 +206,9 @@ impl LnSimulation {
 
             // Start the SenseiController
             println!("starting the sensei controller...");
-            let sensei_controller = Arc::new(SenseiController::new(sensei_admin_service, sensei_runtime_handle));
+            let sensei_controller_arc = Arc::new(sensei_controller);
             let sensei_controller_handle = thread::spawn(move || {
-                sensei_controller.process_events(sensei_event_receiver);
+                sensei_controller_arc.process_events(sensei_event_receiver);
             });
 
             // Start the EventManager
@@ -253,7 +219,7 @@ impl LnSimulation {
             // run at faster-than-real-time pace so that long simulations can be modeled.
             // TODO: if this simulation was built to simply spin up a big network and allow manual testing, do not start the event manager
             let event_manager = SimEventManager::new(self.events.clone());
-            let event_manager_arc = Arc::new(event_manager.clone());
+            let event_manager_arc = Arc::new(event_manager);
             let d = self.duration;
             let event_manager_handle = thread::spawn(move || {
                 event_manager_arc.run(d, sim_event_sender);
@@ -278,11 +244,7 @@ impl LnSimulation {
 
             // Stop bitcoind with nigiri
             println!("stopping bitcoind with nigiri...");
-            Command::new("sh")
-            .arg("-c")
-            .arg("nigiri stop --delete")
-            .output()
-            .expect("failed to execute process");
+            NigiriController::stop();
         });
 
         // Clean up sensei data after the simulation is done
@@ -319,6 +281,14 @@ impl LnSimulation {
                         }
                     }
                 },
+                SimulationEvent::CloseChannelEvent(channel) => {
+                    println!("LnSimulation:{} -- CloseChannelEvent, updating network graph", get_current_time());
+                    self.network_graph.channels.retain(|c| c.node1 != channel.node1 && c.node2 != channel.node2);
+                },
+                SimulationEvent::OpenChannelEvent(channel) => {
+                    println!("LnSimulation:{} -- OpenChannelEvent, updating network graph", get_current_time());
+                    self.network_graph.channels.push(channel);
+                },
                 SimulationEvent::SimulationEnded => {
                     println!("LnSimulation:{} -- SimulationEnded", get_current_time());
                     running = false;
@@ -352,12 +322,13 @@ impl LnSimulation {
     }
 
     // Create a lightweight node in the simulated network
-    pub fn create_node(&mut self, name: String) {
+    pub fn create_node(&mut self, name: String, initial_balance: i32, running: bool) {
         println!("LnSimulation:{} -- create Node: {}", get_current_time(), name);
         let name_key = name.clone();
         let node = SimNode {
             name: name,
-            running: false
+            initial_balance: initial_balance,
+            running: running
         };
         self.nodes.insert(name_key, node);
     }
@@ -391,6 +362,20 @@ impl LnSimulation {
         self.add_event(event, time);
     }
 
+    // Create an event that will open a new channel between two nodes
+    pub fn create_open_channel_event(&mut self, name: String, name2: String, amount: i32, time: u64) {
+        println!("LnSimulation:{} -- add OpenChannelEvent for: {} at {} seconds", get_current_time(), name, time);
+        let event = SimulationEvent::OpenChannelEvent(SimChannel{node1: name, node2: name2, node1_balance: amount, node2_balance: 0});
+        self.add_event(event, time);
+    }
+
+    // Create an event that will close a channel between two nodes
+    pub fn create_close_channel_event(&mut self, name: String, name2: String, amount: i32, time: u64) {
+        println!("LnSimulation:{} -- add CloseChannelEvent for: {} at {} seconds", get_current_time(), name, time);
+        let event = SimulationEvent::CloseChannelEvent(SimChannel{node1: name, node2: name2, node1_balance: amount, node2_balance: 0});
+        self.add_event(event, time);
+    }
+
     // Add a SimulationEvent to the list of events to execute
     pub fn add_event(&mut self, event: SimulationEvent, time: u64) {
         if self.events.contains_key(&time) {
@@ -412,8 +397,10 @@ mod tests {
     fn it_works() {
         // Setup the simulation
         let mut ln_sim = LnSimulation::new(String::from("test"), 10);
-        ln_sim.create_node(String::from("blake"));
-        ln_sim.create_node(String::from("brianna"));
+        ln_sim.create_node(String::from("blake"), 500, true);
+        ln_sim.create_node(String::from("brianna"), 600, true);
+        ln_sim.create_node(String::from("brooks"), 700, true);
+        ln_sim.create_node(String::from("clay"), 800, true);
         ln_sim.create_channel(String::from("blake"), String::from("brianna"), 500);
         ln_sim.create_node_online_event(String::from("blake"), 3);
         ln_sim.create_node_online_event(String::from("brianna"), 3);
@@ -421,7 +408,7 @@ mod tests {
         ln_sim.create_node_offline_event(String::from("brianna"), 8);
 
         assert_eq!(ln_sim.channels.len(), 1);
-        assert_eq!(ln_sim.nodes.len(), 2);
+        assert_eq!(ln_sim.nodes.len(), 4);
         assert_eq!(ln_sim.events.len(), 3);
 
         // Start the simulation

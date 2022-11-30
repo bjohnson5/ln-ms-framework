@@ -149,6 +149,8 @@ pub mod api {
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct CreateNodeRequest {
         name: String,
+        initial_balance: i32,
+        running: bool
     }
 
     #[utoipa::path(
@@ -165,7 +167,7 @@ pub mod api {
             // TODO: Get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => { 
-                    s.create_node(create_node_req.name);
+                    s.create_node(create_node_req.name, create_node_req.initial_balance, create_node_req.running);
                     HttpResponse::Ok().body("Created Node")
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before creating a node")
@@ -208,6 +210,8 @@ pub mod api {
     pub struct CreateEventRequest {
         event_type: String,
         node_name: String,
+        node_name2: String,
+        amount: i32,
         time: u64
     }
 
@@ -229,8 +233,12 @@ pub mod api {
                     // This is for simplicity while creating a proof of concept
                     if create_event_req.event_type == "NodeOfflineEvent" {
                         s.create_node_offline_event(create_event_req.node_name, create_event_req.time);
-                    } else {
+                    } else if create_event_req.event_type == "NodeOnlineEvent"{
                         s.create_node_online_event(create_event_req.node_name, create_event_req.time);
+                    } else if create_event_req.event_type == "OpenChannelEvent"{
+                        s.create_open_channel_event(create_event_req.node_name, create_event_req.node_name2, create_event_req.amount, create_event_req.time);
+                    } else if create_event_req.event_type == "CloseChannelEvent"{
+                        s.create_close_channel_event(create_event_req.node_name, create_event_req.node_name2, create_event_req.amount, create_event_req.time);
                     }
                     HttpResponse::Ok().body("Event Created")
                 }

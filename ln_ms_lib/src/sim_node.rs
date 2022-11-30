@@ -4,5 +4,6 @@ use serde::{Serialize, Deserialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimNode {
     pub name: String,
+    pub initial_balance: i32,
     pub running: bool
 }
