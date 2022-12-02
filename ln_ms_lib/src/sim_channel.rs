@@ -1,3 +1,4 @@
+// External Modules
 use serde::{Serialize, Deserialize};
 
 // This struct represents a channel defined in the simuation

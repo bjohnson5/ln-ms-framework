@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::fs;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool};
+use std::sync::atomic::AtomicBool;
 use std::thread;
 
 // External Modules
@@ -42,36 +42,40 @@ use senseicore::{
     services::admin::AdminService
 };
 
-// Represents a simuation of a lightning network that runs for a specified duration
-// This struct will be the public facing API for users of this library
+// ==================================================================================================================
+// NOTE: This project is currently setup as a Proof of Concept and does not accurately simulate any LN operations yet
+// ==================================================================================================================
+
+// This struct is the public facing API for users of this library
 // A user will define the initial state of the network by adding nodes, channels, events, etc...
 // After the LnSimulation is defined it will be run and the events will take place
-
-// NOTE: This project is currently setup as a Proof of Concept and does not connect or simulate any LN operations
-
 pub struct LnSimulation {
     name: String,
     duration: u64,
-    events: HashMap<u64, Vec<SimulationEvent>>,
-    nodes: HashMap<String, SimNode>,
-    channels: Vec<SimChannel>,
+    num_nodes: u64,
+    user_events: HashMap<u64, Vec<SimulationEvent>>,
+    user_nodes: HashMap<String, SimNode>,
+    user_channels: Vec<SimChannel>,
     network_graph: RuntimeNetworkGraph
 }
 
 impl LnSimulation {
-    pub fn new(name: String, dur: u64) -> Self {
+    // Create a new Lightning Network Simulation with the specified number of default nodes (num_nodes) that will run for a specified duration (dur)
+    pub fn new(name: String, dur: u64, num_nodes: u64) -> Self {
         let sim = LnSimulation {
             name: name,
             duration: dur,
-            events: HashMap::new(),
-            nodes: HashMap::new(),
-            channels: Vec::new(),
+            num_nodes: num_nodes,
+            user_events: HashMap::new(),
+            user_nodes: HashMap::new(),
+            user_channels: Vec::new(),
             network_graph: RuntimeNetworkGraph::new()
         };
 
         sim
     }
 
+    // Run the Lightning Network Simulation
     pub fn run(&mut self) -> Result<()> {
         println!("LnSimulation:{} -- running simulation: {} ({} seconds)", get_current_time(), self.name, self.duration);
 
@@ -86,6 +90,7 @@ impl LnSimulation {
         let stop_signal = Arc::new(AtomicBool::new(false));
         let sensei_data_dir_main = sensei_data_dir.clone();
 
+        // Log some initial configuration details
         println!("sensei data: {}", sensei_data_dir);
         println!("sensei config file: {}", sensei_config_file);
         println!("sensei database: {}", config.database_url);
@@ -109,7 +114,7 @@ impl LnSimulation {
             .build()?;
         let sensei_runtime_handle = sensei_runtime.handle().clone();
 
-        // Setup the main runtime
+        // Setup the main simulation runtime
         let simulation_runtime = Builder::new_multi_thread()
             .worker_threads(20)
             .thread_name("simulation")
@@ -122,22 +127,16 @@ impl LnSimulation {
             println!("starting bitcoind with nigiri...");
             NigiriController::start();
 
-            // Initialize the database
+            // Initialize the sensei database
             println!("starting sensei database...");
-            let mut db_options = ConnectOptions::new(config.database_url.clone());
-            db_options
-                .max_connections(100)
-                .min_connections(10)
-                .connect_timeout(Duration::new(30, 0));
-            let db = Database::connect(db_options).await.unwrap();
-            Migrator::up(&db, None)
-                .await
-                .expect("failed to run migrations");
-            let database = SenseiDatabase::new(db, sensei_db_runtime_handle.clone());
-            database.mark_all_nodes_stopped().await.unwrap();
+            let mut sensei_db_options = ConnectOptions::new(config.database_url.clone());
+            sensei_db_options.max_connections(100).min_connections(10).connect_timeout(Duration::new(30, 0));
+            let sensei_db_conn = Database::connect(sensei_db_options).await.unwrap();
+            Migrator::up(&sensei_db_conn, None).await.expect("failed to run migrations");
+            let sensei_database = SenseiDatabase::new(sensei_db_conn, sensei_db_runtime_handle.clone());
 
             // Initialize the bitcoin client
-            println!("connecting to bitcoind...");
+            println!("initializing the sensei bitcoin client...");
             let bitcoind_client = Arc::new(
                 BitcoindClient::new(
                     config.bitcoind_rpc_host.clone(),
@@ -152,7 +151,7 @@ impl LnSimulation {
 
             // Initialize the chain manager
             println!("initializing the sensei chain manager...");
-            let chain_manager = Arc::new(
+            let sensei_chain_manager = Arc::new(
                 SenseiChainManager::new(
                     config.clone(),
                     bitcoind_client.clone(),
@@ -170,8 +169,8 @@ impl LnSimulation {
                 AdminService::new(
                     &sensei_data_dir,
                     config.clone(),
-                    database,
-                    chain_manager,
+                    sensei_database,
+                    sensei_chain_manager,
                     sensei_event_sender,
                     tokio::runtime::Handle::current(),
                     stop_signal.clone(),
@@ -179,15 +178,20 @@ impl LnSimulation {
                 .await,
             );
 
+            // Create the sensei controller
             let sensei_controller = SenseiController::new(sensei_admin_service, sensei_runtime_handle);
 
+            // TODO: starting lots of sensei nodes is very slow, need to speed this process up by stripping out processes that are not needed for simulations
+            // TODO: funding all of the nodes in the network with some initial liquidity will take some research
+            // TODO: how much liquidity will each node need to have?
+            // TODO: how do we model a realistic LN liquidity distribution?
             // Create the initial state of the network (nodes, channels, balances, etc...)
-            println!("initializing sensei network...");
-            sensei_controller.initialize_network(&self.nodes).await;
+            println!("initializing simulation network...");
+            sensei_controller.initialize_network(&self.user_nodes, &self.user_channels, self.num_nodes).await;
 
             // Set up the initial runtime network graph
             println!("initializing the runtime network graph...");
-            self.network_graph.update(&self.nodes, &self.channels);
+            self.network_graph.update(&self.user_nodes, &self.user_channels, self.num_nodes);
 
             // Create the channel for threads to communicate over
             let (sim_event_sender, _): (broadcast::Sender<SimulationEvent>, broadcast::Receiver<SimulationEvent>) = broadcast::channel(1024);
@@ -215,10 +219,10 @@ impl LnSimulation {
             // This thread will fire off the events at the specified time in the sim
             println!("starting the event manager...");
             // TODO: currently for simplicity in order to create a proof of concept and demonstrate the use case of this project
-            // the duration is denoted in seconds and will run in real time. Eventually this will need to be a longer duration that gets
-            // run at faster-than-real-time pace so that long simulations can be modeled.
-            // TODO: if this simulation was built to simply spin up a big network and allow manual testing, do not start the event manager
-            let event_manager = SimEventManager::new(self.events.clone());
+            //       the duration is denoted in seconds and will run in real time... eventually this will need to be changed to a purely event driven
+            //       time concept that will allow the simulations to be run in a faster-than-real-time mode
+            // TODO: allow for a use case where the user wants to spin up a large network and connect a user-controlled node to perform manual testing
+            let event_manager = SimEventManager::new(self.user_events.clone());
             let event_manager_arc = Arc::new(event_manager);
             let d = self.duration;
             let event_manager_handle = thread::spawn(move || {
@@ -318,7 +322,7 @@ impl LnSimulation {
     // Export the network to a json file that can be loaded later
     pub fn export_network(&self, filename: String) {
         println!("LnSimulation:{} -- exporting network definition from {}", get_current_time(), filename);
-        // TODO: Implement        
+        // TODO: Implement
     }
 
     // Create a lightweight node in the simulated network
@@ -330,7 +334,7 @@ impl LnSimulation {
             initial_balance: initial_balance,
             running: running
         };
-        self.nodes.insert(name_key, node);
+        self.user_nodes.insert(name_key, node);
     }
 
     // Open a channel between two lightweight nodes in the simulated network
@@ -342,7 +346,7 @@ impl LnSimulation {
             node1_balance: amount,
             node2_balance: 0
         };
-        self.channels.push(channel1);
+        self.user_channels.push(channel1);
     }
 
     // TODO: There should be a generic create_event function that allows the user to create all supported events
@@ -378,13 +382,13 @@ impl LnSimulation {
 
     // Add a SimulationEvent to the list of events to execute
     pub fn add_event(&mut self, event: SimulationEvent, time: u64) {
-        if self.events.contains_key(&time) {
-            let current_events = self.events.get_mut(&time).unwrap();
+        if self.user_events.contains_key(&time) {
+            let current_events = self.user_events.get_mut(&time).unwrap();
             current_events.push(event);
         } else {
             let mut current_events: Vec<SimulationEvent> = Vec::new();
             current_events.push(event);
-            self.events.insert(time, current_events);
+            self.user_events.insert(time, current_events);
         }
     }
 }
@@ -396,21 +400,22 @@ mod tests {
     #[test]
     fn it_works() {
         // Setup the simulation
-        let mut ln_sim = LnSimulation::new(String::from("test"), 10);
-        ln_sim.create_node(String::from("blake"), 500, true);
-        ln_sim.create_node(String::from("brianna"), 600, true);
-        ln_sim.create_node(String::from("brooks"), 700, true);
-        ln_sim.create_node(String::from("clay"), 800, true);
+        let mut ln_sim = LnSimulation::new(String::from("test"), 10, 5);
+        
+        ln_sim.create_node(String::from("blake"), 500, false);
+        ln_sim.create_node(String::from("brianna"), 600, false);
+        ln_sim.create_node(String::from("brooks"), 700, false);
+        ln_sim.create_node(String::from("clay"), 800, false);
         ln_sim.create_channel(String::from("blake"), String::from("brianna"), 500);
         ln_sim.create_node_online_event(String::from("blake"), 3);
         ln_sim.create_node_online_event(String::from("brianna"), 3);
         ln_sim.create_node_offline_event(String::from("blake"), 6);
         ln_sim.create_node_offline_event(String::from("brianna"), 8);
-
-        assert_eq!(ln_sim.channels.len(), 1);
-        assert_eq!(ln_sim.nodes.len(), 4);
-        assert_eq!(ln_sim.events.len(), 3);
-
+        
+        assert_eq!(ln_sim.user_channels.len(), 1);
+        assert_eq!(ln_sim.user_nodes.len(), 4);
+        assert_eq!(ln_sim.user_events.len(), 3);
+        
         // Start the simulation
         let success = ln_sim.run();
         assert_eq!(success.is_ok(), true);

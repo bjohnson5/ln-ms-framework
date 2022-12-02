@@ -1,3 +1,4 @@
+// Standard Modules
 use std::process::Command;
 
 pub struct NigiriController {
@@ -9,7 +10,7 @@ impl NigiriController {
         .arg("-c")
         .arg("nigiri start")
         .output()
-        .expect("failed to execute process");
+        .expect("failed to execute start process");
     }
 
     pub fn stop() {
@@ -17,7 +18,7 @@ impl NigiriController {
         .arg("-c")
         .arg("nigiri stop --delete")
         .output()
-        .expect("failed to execute process");
+        .expect("failed to execute stop process");
     }
 
     pub fn fund_address(addr: String, amount: i32) {
@@ -27,12 +28,6 @@ impl NigiriController {
         .arg("-c")
         .arg(&arg)
         .output()
-        .expect("failed to execute process");
-
-        Command::new("sh")
-        .arg("-c")
-        .arg("nigiri rpc -generate 1")
-        .output()
-        .expect("failed to execute process");
+        .expect("failed to execute fund process");
     }
 }

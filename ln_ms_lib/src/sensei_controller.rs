@@ -1,13 +1,16 @@
 // Project modules
 use crate::sim_event::SimulationEvent;
 use crate::sim_node::SimNode;
+use crate::sim_channel::SimChannel;
 use crate::nigiri_controller::NigiriController;
 
 // Standard modules
 use std::sync::Arc;
-use std::sync::atomic::{Ordering};
-use tokio::sync::broadcast;
+use std::sync::atomic::Ordering;
 use std::collections::HashMap;
+
+// External modules
+use tokio::sync::broadcast;
 
 // Sensei modules
 use senseicore::services::admin::{AdminRequest, AdminResponse, AdminService};
@@ -16,7 +19,6 @@ use entity::node;
 use senseicore::node::LightningNode;
 
 // This struct holds the Sensei Admin Service and will process simulation events by controlling the Sensei nodes in the network
-
 #[derive(Clone)]
 pub struct SenseiController {
     sensei_admin_service: Arc<AdminService>,
@@ -33,6 +35,7 @@ impl SenseiController {
         controller
     }
 
+    // TODO: implement all other events
     // The process_events function will receive events and make the appropriate calls to the Sensei Admin Service
     pub fn process_events(&self, mut event_channel: broadcast::Receiver<SimulationEvent>) {
         tokio::task::block_in_place(move || {
@@ -51,9 +54,11 @@ impl SenseiController {
                         },
                         SimulationEvent::CloseChannelEvent(channel) => {
                             println!("SenseiController:{} -- running a CloseChannel event for {} <-> {}", crate::get_current_time(), channel.node1, channel.node2);
+                            // TODO: implement
                         },
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("SenseiController:{} -- running an OpenChannel event for {} <-> {}", crate::get_current_time(), channel.node1, channel.node2);
+                            // TODO: implement
                         },
                         SimulationEvent::SimulationEnded => {
                             println!("SenseiController:{} -- Simulation has ended", crate::get_current_time());
@@ -67,8 +72,50 @@ impl SenseiController {
         });
     }
 
+    // TODO: this function is slow because creating sensei nodes is slow, needs to be re-worked to speed up if the simulation framework is going to allow for large networks
     // Create and fund all the initial nodes in the network
-    pub async fn initialize_network(&self, nodes: &HashMap<String, SimNode>) {
+    pub async fn initialize_network(&self, nodes: &HashMap<String, SimNode>, _channels: &Vec<SimChannel>, num_nodes: u64) {
+        // TODO: allow the user to configure these default nodes (example: how much initial balance?)
+        // Start the specified number of default nodes that are already in the sensei database
+        let num = num_nodes + 1;
+        for number in 1..num {
+            let node_name = String::from("node")+&number.to_string();
+            let create_node_req = AdminRequest::CreateNode { 
+                username: node_name.clone(), 
+                alias: node_name.clone(), 
+                passphrase: node_name.clone(), 
+                start: true,
+                entropy: None,
+                cross_node_entropy: None,
+            };
+            match self.sensei_admin_service.call(create_node_req).await {
+                Ok(response) => match response {
+                    AdminResponse::CreateNode {
+                        ..
+                    } => {
+                        match self.get_sensei_node(&node_name).await {
+                            Ok(node) => {
+                                let node_req = NodeRequest::GetUnusedAddress {};
+                                let address_resp = node.call(node_req).await.unwrap();
+                                match address_resp {
+                                    senseicore::services::node::NodeResponse::GetUnusedAddress { address } => {
+                                        NigiriController::fund_address(address, 500);
+                                    }
+                                    _ => println!("error getting unused address"),
+                                }
+                            },
+                            _ => {
+                                println!("node not found");
+                            }
+                        }
+                    },
+                    _ => println!("no response from create node request")
+                },
+                Err(_) => println!("node failed to be created")
+            }
+        }
+        
+        // Create and fund the user nodes, start them all in order to setup channels and fund the on chain wallets
         for n in nodes {
             let create_node_req = AdminRequest::CreateNode { 
                 username: String::from(n.0), 
@@ -85,13 +132,15 @@ impl SenseiController {
                     } => {
                         match self.get_sensei_node(n.0).await {
                             Ok(node) => {
-                                let node_req = NodeRequest::GetUnusedAddress {};
-                                let address_resp = node.call(node_req).await.unwrap();
-                                match address_resp {
-                                    senseicore::services::node::NodeResponse::GetUnusedAddress { address } => {
-                                        NigiriController::fund_address(address, n.1.initial_balance);
+                                if n.1.initial_balance != 0 {
+                                    let node_req = NodeRequest::GetUnusedAddress {};
+                                    let address_resp = node.call(node_req).await.unwrap();
+                                    match address_resp {
+                                        senseicore::services::node::NodeResponse::GetUnusedAddress { address } => {
+                                            NigiriController::fund_address(address, n.1.initial_balance);
+                                        }
+                                        _ => println!("error getting unused address"),
                                     }
-                                    _ => println!("error getting unused address"),
                                 }
                             },
                             _ => {
@@ -168,7 +217,7 @@ impl SenseiController {
     pub async fn get_sensei_node_model(&self, name: &String) -> Option<node::Model> {
         let db_node = self.sensei_admin_service
         .database
-        .get_node_by_username(&name)
+        .get_node_by_username(name)
         .await;
         match db_node {
             Ok(option) => {
@@ -183,7 +232,7 @@ impl SenseiController {
 
     // Stop a sensei node
     pub async fn stop_node(&self, name: &String) {
-        match self.get_sensei_node_model(&name).await {
+        match self.get_sensei_node_model(name).await {
             Some(model) => {
                 let id = String::from(model.id);
                 let stop_node_req = AdminRequest::StopNode {
@@ -203,7 +252,7 @@ impl SenseiController {
 
     // Start a sensei node
     pub async fn start_node(&self, name: &String) {
-        match self.get_sensei_node_model(&name).await {
+        match self.get_sensei_node_model(name).await {
             Some(model) => {
                 let id = String::from(model.id);
                 let start_node_req = AdminRequest::StartNode {
@@ -217,7 +266,7 @@ impl SenseiController {
                 }
             },
             None => {
-                println!("node not found in the database");
+                println!("node not found in the database {}", name);
             }
         }
     }

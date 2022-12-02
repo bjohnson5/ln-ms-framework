@@ -5,7 +5,7 @@ use crate::sim_event::SimulationEvent;
 use std::collections::HashMap;
 use std::{thread, time};
 
-
+// External Modules
 use tokio::sync::broadcast;
 
 // This struct holds all of the events that will take place over the duration of the simulation
@@ -23,13 +23,10 @@ impl SimEventManager {
         event_manager
     }
 
-    // TODO: This function will need to execute in its own thread
-    // It will need to not sleep and to have scheduled executions in its own thread
-    // For now, in order to create a proof of concept and demonstrate the project it will simply run in a loop and sleep
-
-    // TODO: This function is based on seconds and runs at real time, eventually it will need to be able to run for
-    // longer durations and at a faster-than-real-time rate
-
+    // TODO: this function will need to not sleep and to have scheduled executions in its own thread
+    // TODO: for now, in order to create a proof of concept and demonstrate the project it will simply run in a loop and sleep
+    // TODO: this function is based on seconds and runs at real time, eventually it will need to be changed to a purely event based design
+    //       to allow for faster-than-real-time simulation runs
     // Send SimulationEvent objects through the event channel at the correct simulation time
     pub fn run(&self, duration: u64, event_channel: broadcast::Sender<SimulationEvent>) {
         println!("SimEventManager:{} -- running SimEventManager for {} seconds", crate::get_current_time(), duration);
@@ -37,7 +34,6 @@ impl SimEventManager {
         let mut current_sec = 0;
         while current_sec <= duration {
             if self.events.contains_key(&current_sec) {
-                // There is at least one event at this time
                 let current_events = &self.events[&current_sec];
                 let current_events_iter = current_events.iter();
                 for e in current_events_iter {

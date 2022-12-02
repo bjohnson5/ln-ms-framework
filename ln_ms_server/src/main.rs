@@ -4,6 +4,10 @@ use actix_web::{App, HttpServer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{SwaggerUi, Url};
 
+// ==================================================================================================================
+// NOTE: This project is currently setup as a Proof of Concept and does not accurately simulate any LN operations yet
+// ==================================================================================================================
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
 
@@ -17,7 +21,8 @@ async fn main() -> std::io::Result<()> {
             api::create_channel,
             api::create_event,
             api::run_sim,
-            api::import_network
+            api::import_network,
+            api::export_network
         ),
         components(schemas(
             api::CreateSimRequest,
@@ -25,7 +30,8 @@ async fn main() -> std::io::Result<()> {
             api::CreateChannelRequest,
             api::CreateEventRequest,
             api::RunSimulationRequest,
-            api::ImportNetworkRequest
+            api::ImportNetworkRequest,
+            api::ExportNetworkRequest
         )
         )
     )]
@@ -80,10 +86,11 @@ pub mod api {
             .body(include_str!("../static/network_monitor.html")))
     }
 
-    // TODO: This will not be a global variable, each endpoint will get the LnSimulation object from the database
-    // For simplicity it will be used as a global variable right now in order to demonstate the use case
+    // TODO: this will not be a global variable, each endpoint will get the LnSimulation object from the database
+    //       for simplicity it will be used as a global variable right now in order to demonstate the use case
     static mut SIM: Option<LnSimulation> = None;
 
+    // TODO: implement
     #[utoipa::path(
         params(
             ("sim_name", description = "The name of the simulation to get information about")
@@ -99,6 +106,7 @@ pub mod api {
         HttpResponse::Ok().body(response)
     }
 
+    // TODO: implement
     #[utoipa::path(
         params(
             ("sim_name", description = "The name of the simulation to get information about")
@@ -111,7 +119,7 @@ pub mod api {
     pub async fn get_network(sim_name: Path<String>) -> impl Responder {
         let _sim_name = sim_name.into_inner();
         unsafe {
-            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_ref() {
                 Some(s) => { 
                     let network_json = s.get_runtime_network_graph();
@@ -126,7 +134,8 @@ pub mod api {
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct CreateSimRequest {
         name: String,
-        duration: u64
+        duration: u64,
+        num_nodes: u64
     }
 
     #[utoipa::path(
@@ -139,8 +148,8 @@ pub mod api {
     pub async fn create_sim(req: Json<CreateSimRequest>) -> impl Responder {
         let create_sim_req = req.into_inner();
         unsafe {
-            // TODO: Create the simulation object and save it to a database and do not use a static global unsafe variable
-            SIM = Option::Some(LnSimulation::new(create_sim_req.name, create_sim_req.duration));
+            // TODO: create the simulation object and save it to a database and do not use a static global unsafe variable
+            SIM = Option::Some(LnSimulation::new(create_sim_req.name, create_sim_req.duration, create_sim_req.num_nodes));
         }
         HttpResponse::Ok().body("Created Simulation")
     }
@@ -164,7 +173,7 @@ pub mod api {
     pub async fn create_node(req: Json<CreateNodeRequest>) -> impl Responder {
         let create_node_req = req.into_inner();
         unsafe {
-            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => { 
                     s.create_node(create_node_req.name, create_node_req.initial_balance, create_node_req.running);
@@ -194,7 +203,7 @@ pub mod api {
     pub async fn create_channel(req: Json<CreateChannelRequest>) -> impl Responder {
         let create_channel_req = req.into_inner();
         unsafe {
-            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
                     s.create_channel(create_channel_req.node1_name, create_channel_req.node2_name, create_channel_req.amount);
@@ -226,11 +235,11 @@ pub mod api {
     pub async fn create_event(req: Json<CreateEventRequest>) -> impl Responder {
         let create_event_req = req.into_inner();
         unsafe {
-            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
-                    // TODO: This will need to be much more generic and the request will need to only allow supported events
-                    // This is for simplicity while creating a proof of concept
+                    // TODO: this will need to be much more generic and the request will need to only allow supported events
+                    //       this is for simplicity while creating a proof of concept
                     if create_event_req.event_type == "NodeOfflineEvent" {
                         s.create_node_offline_event(create_event_req.node_name, create_event_req.time);
                     } else if create_event_req.event_type == "NodeOnlineEvent"{
@@ -264,7 +273,7 @@ pub mod api {
     pub async fn run_sim(req: Json<RunSimulationRequest>) -> impl Responder {
         let run_sim_request = req.into_inner();
         unsafe {
-            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
                     thread::spawn(|| {s.run()});
@@ -281,6 +290,7 @@ pub mod api {
         filename: String
     }
 
+    // TODO: implement
     #[utoipa::path(
         request_body = ImportNetworkRequest,
         responses(
@@ -292,10 +302,39 @@ pub mod api {
     pub async fn import_network(req: Json<ImportNetworkRequest>) -> impl Responder {
         let import_request = req.into_inner();
         unsafe {
-            // TODO: Get the simulation object from a database and do not use a static global unsafe variable
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
                     s.import_network(import_request.filename);
+                    HttpResponse::Ok().body("Network Imported")
+                }
+                None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before importing a network definition")
+            }   
+        }
+    }
+
+    // A request to export a network definition from a file
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct ExportNetworkRequest {
+        filename: String
+    }
+
+    // TODO: implement
+    #[utoipa::path(
+        request_body = ExportNetworkRequest,
+        responses(
+            (status = 200, description = "Network successfully exported", body = String),
+            (status = 404, description = "Simulation not found", body = String)
+        )
+    )]
+    #[post("/export_network")]
+    pub async fn export_network(req: Json<ExportNetworkRequest>) -> impl Responder {
+        let export_request = req.into_inner();
+        unsafe {
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
+            match SIM.as_mut() {
+                Some(s) => {
+                    s.import_network(export_request.filename);
                     HttpResponse::Ok().body("Network Imported")
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before importing a network definition")

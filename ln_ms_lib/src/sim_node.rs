@@ -1,3 +1,4 @@
+// External Modules
 use serde::{Serialize, Deserialize};
 
 // This struct represents a node defined in the simulation
