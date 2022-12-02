@@ -21,7 +21,7 @@ cd ln_ms_server
 cargo build
 cargo run
 ```
-- View the swagger API documentation here: http://localhost:8080/swagger-ui/index.html
+- After starting the server, view the swagger API documentation here: http://localhost:8080/swagger-ui/index.html
 - After creating a simulation, view the network monitor here: http://localhost:8080/network_monitor
 
 ### Dependencies
