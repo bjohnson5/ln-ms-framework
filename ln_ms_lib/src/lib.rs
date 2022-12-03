@@ -76,7 +76,7 @@ impl LnSimulation {
     }
 
     // Run the Lightning Network Simulation
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run(&mut self, nigiri: bool) -> Result<()> {
         println!("LnSimulation:{} -- running simulation: {} ({} seconds)", get_current_time(), self.name, self.duration);
 
         // Setup the sensei config
@@ -123,9 +123,11 @@ impl LnSimulation {
 
         // Initialize sensei and the simulation
         simulation_runtime.block_on(async move {
-            // Start bitcoind with nigiri
-            println!("starting bitcoind with nigiri...");
-            NigiriController::start();
+            if nigiri {
+                // Start bitcoind with nigiri
+                println!("starting bitcoind with nigiri...");
+                NigiriController::start();
+            }
 
             // Initialize the sensei database
             println!("starting sensei database...");
@@ -187,7 +189,7 @@ impl LnSimulation {
             // TODO: how do we model a realistic LN liquidity distribution?
             // Create the initial state of the network (nodes, channels, balances, etc...)
             println!("initializing simulation network...");
-            sensei_controller.initialize_network(&self.user_nodes, &self.user_channels, self.num_nodes).await;
+            sensei_controller.initialize_network(&self.user_nodes, &self.user_channels, self.num_nodes, nigiri).await;
 
             // Set up the initial runtime network graph
             println!("initializing the runtime network graph...");
@@ -246,9 +248,11 @@ impl LnSimulation {
             self.network_graph.nodes.clear();
             self.network_graph.channels.clear();
 
-            // Stop bitcoind with nigiri
-            println!("stopping bitcoind with nigiri...");
-            NigiriController::stop();
+            if nigiri {
+                // Stop bitcoind with nigiri
+                println!("stopping bitcoind with nigiri...");
+                NigiriController::stop();
+            }
         });
 
         // Clean up sensei data after the simulation is done
@@ -417,7 +421,7 @@ mod tests {
         assert_eq!(ln_sim.user_events.len(), 3);
         
         // Start the simulation
-        let success = ln_sim.run();
+        let success = ln_sim.run(true);
         assert_eq!(success.is_ok(), true);
     }
 }

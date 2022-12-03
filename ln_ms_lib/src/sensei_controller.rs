@@ -74,7 +74,7 @@ impl SenseiController {
 
     // TODO: this function is slow because creating sensei nodes is slow, needs to be re-worked to speed up if the simulation framework is going to allow for large networks
     // Create and fund all the initial nodes in the network
-    pub async fn initialize_network(&self, nodes: &HashMap<String, SimNode>, _channels: &Vec<SimChannel>, num_nodes: u64) {
+    pub async fn initialize_network(&self, nodes: &HashMap<String, SimNode>, _channels: &Vec<SimChannel>, num_nodes: u64, nigiri: bool) {
         // TODO: allow the user to configure these default nodes (example: how much initial balance?)
         // Start the specified number of default nodes that are already in the sensei database
         let num = num_nodes + 1;
@@ -93,19 +93,21 @@ impl SenseiController {
                     AdminResponse::CreateNode {
                         ..
                     } => {
-                        match self.get_sensei_node(&node_name).await {
-                            Ok(node) => {
-                                let node_req = NodeRequest::GetUnusedAddress {};
-                                let address_resp = node.call(node_req).await.unwrap();
-                                match address_resp {
-                                    senseicore::services::node::NodeResponse::GetUnusedAddress { address } => {
-                                        NigiriController::fund_address(address, 500);
+                        if nigiri {
+                            match self.get_sensei_node(&node_name).await {
+                                Ok(node) => {
+                                    let node_req = NodeRequest::GetUnusedAddress {};
+                                    let address_resp = node.call(node_req).await.unwrap();
+                                    match address_resp {
+                                        senseicore::services::node::NodeResponse::GetUnusedAddress { address } => {
+                                            NigiriController::fund_address(address, 500);
+                                        }
+                                        _ => println!("error getting unused address"),
                                     }
-                                    _ => println!("error getting unused address"),
+                                },
+                                _ => {
+                                    println!("node not found");
                                 }
-                            },
-                            _ => {
-                                println!("node not found");
                             }
                         }
                     },
@@ -130,9 +132,9 @@ impl SenseiController {
                     AdminResponse::CreateNode {
                         ..
                     } => {
-                        match self.get_sensei_node(n.0).await {
-                            Ok(node) => {
-                                if n.1.initial_balance != 0 {
+                        if n.1.initial_balance != 0 && nigiri {
+                            match self.get_sensei_node(n.0).await {
+                                Ok(node) => {
                                     let node_req = NodeRequest::GetUnusedAddress {};
                                     let address_resp = node.call(node_req).await.unwrap();
                                     match address_resp {
@@ -141,10 +143,10 @@ impl SenseiController {
                                         }
                                         _ => println!("error getting unused address"),
                                     }
+                                },
+                                _ => {
+                                    println!("node not found");
                                 }
-                            },
-                            _ => {
-                                println!("node not found");
                             }
                         }
                     },

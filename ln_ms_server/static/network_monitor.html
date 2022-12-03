@@ -6,13 +6,21 @@
     <script src="/static/jquery.js"></script>
     <script src="/static/cytoscape.js"></script>
 
-    <style type="text/css">
+    <style>
       #mynetwork {
-        width: 1200px;
-        height: 800px;
-        border: 1px solid lightgray;
+        width: 1900px;
+        height: 1000px;
+        background-color: #262626;
       }
     </style>
+    <style>
+	    body {
+  		  background-color: #262626;
+	    }
+      p {
+    	  color: white;
+      }
+	  </style>
   </head>
   <body>
     <p>Simulation Network Graph:</p>
@@ -20,27 +28,30 @@
     <div id="mynetwork"></div>
 
     <script type="text/javascript">
-        var cy = cytoscape({
+      var cy = cytoscape({
 
-        container: document.getElementById('mynetwork'), // container to render in
+      container: document.getElementById('mynetwork'), // container to render in
 
-        style: [ // the stylesheet for the graph
-        {
-            selector: 'node',
-            style: {
-            'label': 'data(id)'
-            }
-        },
-        {
-            selector: 'edge',
-            style: {
-            'width': 3,
-            'line-color': '#ccc',
-            'curve-style': 'bezier'
-            }
-        }
-        ],
-        });
+      style: [ // the stylesheet for the graph
+      {
+          selector: 'node',
+          style: {
+          'label': 'data(id)',
+          'font-size': "12px",
+          'color': "white",
+          'shape': "round-rectangle"
+          }
+      },
+      {
+          selector: 'edge',
+          style: {
+          'width': 3,
+          'line-color': '#ccc',
+          'curve-style': 'bezier'
+          }
+      }
+      ],
+      });
 
       function worker() {
         $.ajax({
@@ -73,8 +84,8 @@
                 }
               });
 
-              cy.nodes('[?running]').style('background-color', 'green');
-              cy.nodes('[!running]').style('background-color', 'red');
+              cy.nodes('[?running]').style('background-color', '#00b359');
+              cy.nodes('[!running]').style('background-color', '#ff6666');
 
               // add new channels
               var result_channels = result.channels;
@@ -99,7 +110,7 @@
               });
 
               var layout = cy.layout({
-                name: 'circle'
+                name: 'grid'
               });
               layout.run();
             },

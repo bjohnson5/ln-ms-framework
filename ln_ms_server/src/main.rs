@@ -259,7 +259,8 @@ pub mod api {
     // A request to start the simulation
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct RunSimulationRequest {
-        name: String
+        name: String,
+        nigiri: bool
     }
 
     #[utoipa::path(
@@ -276,7 +277,7 @@ pub mod api {
             // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
-                    thread::spawn(|| {s.run()});
+                    thread::spawn(move || {s.run(run_sim_request.nigiri)});
                     HttpResponse::Ok().body(String::from("Running Simulation: ") + &run_sim_request.name)
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before running a simulation")
