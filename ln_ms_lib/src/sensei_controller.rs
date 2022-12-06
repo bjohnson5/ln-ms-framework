@@ -53,11 +53,11 @@ impl SenseiController {
                             self.start_node(&name).await;
                         },
                         SimulationEvent::CloseChannelEvent(channel) => {
-                            println!("SenseiController:{} -- running a CloseChannel event for {} <-> {}", crate::get_current_time(), channel.node1, channel.node2);
+                            println!("SenseiController:{} -- running a CloseChannel event for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             // TODO: implement
                         },
                         SimulationEvent::OpenChannelEvent(channel) => {
-                            println!("SenseiController:{} -- running an OpenChannel event for {} <-> {}", crate::get_current_time(), channel.node1, channel.node2);
+                            println!("SenseiController:{} -- running an OpenChannel event for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             // TODO: implement
                         },
                         SimulationEvent::SimulationEnded => {

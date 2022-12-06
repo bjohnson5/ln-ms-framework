@@ -1,0 +1,6 @@
+{
+    "initial_on_chain": "50000-100000",
+    "number_channels": "1-10",
+    "outbound_percentage": 100,
+    "routing_fee": ""
+}

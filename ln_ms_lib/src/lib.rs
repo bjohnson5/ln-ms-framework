@@ -132,10 +132,13 @@ impl LnSimulation {
             // Initialize the sensei database
             println!("starting sensei database...");
             let mut sensei_db_options = ConnectOptions::new(config.database_url.clone());
-            sensei_db_options.max_connections(100).min_connections(10).connect_timeout(Duration::new(30, 0));
-            let sensei_db_conn = Database::connect(sensei_db_options).await.unwrap();
-            Migrator::up(&sensei_db_conn, None).await.expect("failed to run migrations");
-            let sensei_database = SenseiDatabase::new(sensei_db_conn, sensei_db_runtime_handle.clone());
+            sensei_db_options
+            .max_connections(100)
+            .min_connections(10)
+            .connect_timeout(Duration::new(30, 0));
+            let sensei_db_conn = Database::connect(sensei_db_options).await.expect("unable to connect to sensei database");
+            Migrator::up(&sensei_db_conn, None).await.expect("unable to run migrations");
+            let sensei_database = SenseiDatabase::new(sensei_db_conn, sensei_db_runtime_handle);
 
             // Initialize the bitcoin client
             println!("initializing the sensei bitcoin client...");
@@ -291,7 +294,7 @@ impl LnSimulation {
                 },
                 SimulationEvent::CloseChannelEvent(channel) => {
                     println!("LnSimulation:{} -- CloseChannelEvent, updating network graph", get_current_time());
-                    self.network_graph.channels.retain(|c| c.node1 != channel.node1 && c.node2 != channel.node2);
+                    self.network_graph.channels.retain(|c| c.src_node != channel.src_node && c.dest_node != channel.dest_node);
                 },
                 SimulationEvent::OpenChannelEvent(channel) => {
                     println!("LnSimulation:{} -- OpenChannelEvent, updating network graph", get_current_time());
@@ -307,7 +310,6 @@ impl LnSimulation {
 
     // Get the current network graph for the simulation
     pub fn get_runtime_network_graph(&self) -> String {
-        println!("LnSimulation:{} -- get current runtime network graph", get_current_time());
         let serialized_nodes = serde_json::to_string(&self.network_graph.nodes).unwrap();
         let serialized_channels = serde_json::to_string(&self.network_graph.channels).unwrap();
         let mut map = Map::new();
@@ -341,14 +343,20 @@ impl LnSimulation {
         self.user_nodes.insert(name_key, node);
     }
 
+    // Create a set of nodes with pre-defined properties
+    pub fn create_node_set(&mut self, number_of_nodes: i32, profile: String) {
+        println!("LnSimulation:{} -- create Node Set: {}, {}", get_current_time(), number_of_nodes, profile);
+        // TODO: Implement
+    }
+
     // Open a channel between two lightweight nodes in the simulated network
-    pub fn create_channel(&mut self, node1_name: String, node2_name: String, amount: i32) {
-        println!("LnSimulation:{} -- open Channel: {} -> {} for {} sats", get_current_time(), node1_name, node2_name, amount);
+    pub fn create_channel(&mut self, src: String, dest: String, amount: i32) {
+        println!("LnSimulation:{} -- open Channel: {} -> {} for {} sats", get_current_time(), src, dest, amount);
         let channel1 = SimChannel {
-            node1: node1_name,
-            node2: node2_name,
-            node1_balance: amount,
-            node2_balance: 0
+            src_node: src,
+            dest_node: dest,
+            src_balance: amount,
+            dest_balance: 0
         };
         self.user_channels.push(channel1);
     }
@@ -371,16 +379,16 @@ impl LnSimulation {
     }
 
     // Create an event that will open a new channel between two nodes
-    pub fn create_open_channel_event(&mut self, name: String, name2: String, amount: i32, time: u64) {
-        println!("LnSimulation:{} -- add OpenChannelEvent for: {} at {} seconds", get_current_time(), name, time);
-        let event = SimulationEvent::OpenChannelEvent(SimChannel{node1: name, node2: name2, node1_balance: amount, node2_balance: 0});
+    pub fn create_open_channel_event(&mut self, src: String, dest: String, amount: i32, time: u64) {
+        println!("LnSimulation:{} -- add OpenChannelEvent for: {} at {} seconds", get_current_time(), src, time);
+        let event = SimulationEvent::OpenChannelEvent(SimChannel{src_node: src, dest_node: dest, src_balance: amount, dest_balance: 0});
         self.add_event(event, time);
     }
 
     // Create an event that will close a channel between two nodes
-    pub fn create_close_channel_event(&mut self, name: String, name2: String, amount: i32, time: u64) {
-        println!("LnSimulation:{} -- add CloseChannelEvent for: {} at {} seconds", get_current_time(), name, time);
-        let event = SimulationEvent::CloseChannelEvent(SimChannel{node1: name, node2: name2, node1_balance: amount, node2_balance: 0});
+    pub fn create_close_channel_event(&mut self, src: String, dest: String, amount: i32, time: u64) {
+        println!("LnSimulation:{} -- add CloseChannelEvent for: {} at {} seconds", get_current_time(), src, time);
+        let event = SimulationEvent::CloseChannelEvent(SimChannel{src_node: src, dest_node: dest, src_balance: amount, dest_balance: 0});
         self.add_event(event, time);
     }
 

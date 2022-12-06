@@ -1,1 +1,23 @@
-{"bitcoind_rpc_host":"localhost","bitcoind_rpc_port":18443,"bitcoind_rpc_username":"admin1","bitcoind_rpc_password":"123","network":"regtest","api_host":"127.0.0.1","api_port":5401,"port_range_min":10000,"port_range_max":65535,"database_url":"sensei.db","remote_p2p_host":null,"remote_p2p_token":null,"remote_chain_host":null,"remote_chain_token":null,"gossip_peers":"","instance_name":"sensei","http_notifier_url":null,"http_notifier_token":null,"region":null,"poll_for_chain_updates":true,"rapid_gossip_sync_server_host":null}
+{
+    "bitcoind_rpc_host": "localhost",
+    "bitcoind_rpc_port": 18443,
+    "bitcoind_rpc_username": "admin1",
+    "bitcoind_rpc_password": "123",
+    "network": "regtest",
+    "api_host": "127.0.0.1",
+    "api_port": 5401,
+    "port_range_min": 10000,
+    "port_range_max": 65535,
+    "database_url": "sensei.db",
+    "remote_p2p_host": null,
+    "remote_p2p_token": null,
+    "remote_chain_host": null,
+    "remote_chain_token": null,
+    "gossip_peers": "",
+    "instance_name": "sensei",
+    "http_notifier_url": null,
+    "http_notifier_token": null,
+    "region": null,
+    "poll_for_chain_updates": true,
+    "rapid_gossip_sync_server_host": null
+}

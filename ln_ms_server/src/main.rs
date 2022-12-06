@@ -187,8 +187,8 @@ pub mod api {
     // A request to create a new channel and add it to the simulation
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct CreateChannelRequest {
-        node1_name: String,
-        node2_name: String,
+        src_name: String,
+        dest_name: String,
         amount: i32
     }
 
@@ -206,7 +206,7 @@ pub mod api {
             // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
-                    s.create_channel(create_channel_req.node1_name, create_channel_req.node2_name, create_channel_req.amount);
+                    s.create_channel(create_channel_req.src_name, create_channel_req.dest_name, create_channel_req.amount);
                     HttpResponse::Ok().body("Created Channel")
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before creating a channel")
@@ -218,8 +218,8 @@ pub mod api {
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct CreateEventRequest {
         event_type: String,
-        node_name: String,
-        node_name2: String,
+        src_name: String,
+        dest_name: String,
         amount: i32,
         time: u64
     }
@@ -241,13 +241,13 @@ pub mod api {
                     // TODO: this will need to be much more generic and the request will need to only allow supported events
                     //       this is for simplicity while creating a proof of concept
                     if create_event_req.event_type == "NodeOfflineEvent" {
-                        s.create_node_offline_event(create_event_req.node_name, create_event_req.time);
+                        s.create_node_offline_event(create_event_req.src_name, create_event_req.time);
                     } else if create_event_req.event_type == "NodeOnlineEvent"{
-                        s.create_node_online_event(create_event_req.node_name, create_event_req.time);
+                        s.create_node_online_event(create_event_req.src_name, create_event_req.time);
                     } else if create_event_req.event_type == "OpenChannelEvent"{
-                        s.create_open_channel_event(create_event_req.node_name, create_event_req.node_name2, create_event_req.amount, create_event_req.time);
+                        s.create_open_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
                     } else if create_event_req.event_type == "CloseChannelEvent"{
-                        s.create_close_channel_event(create_event_req.node_name, create_event_req.node_name2, create_event_req.amount, create_event_req.time);
+                        s.create_close_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
                     }
                     HttpResponse::Ok().body("Event Created")
                 }
