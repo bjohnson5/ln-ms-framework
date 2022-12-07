@@ -8,7 +8,7 @@
 
     <style>
       #mynetwork {
-        width: 1900px;
+        width: 1000px;
         height: 1000px;
         background-color: #262626;
       }
@@ -90,9 +90,9 @@
               // add new channels
               var result_channels = result.channels;
               $.each(JSON.parse(result_channels), function(index, item) {
-                var el = cy.getElementById(item.node1+item.node2);
+                var el = cy.getElementById(item.src_node+item.dest_node);
                 if (el.length == 0) {
-                    cy.add({group: 'edges', data:{ id: item.node1+item.node2, source: item.node1, target: item.node2 }});
+                    cy.add({group: 'edges', data:{ id: item.src_node+item.dest_node, source: item.src_node, target: item.dest_node }});
                 }
               });
 
@@ -100,7 +100,7 @@
               cy.edges().forEach(element => {
                 var needRemove = true;
                 $.each(JSON.parse(result_channels), function (index, item) {
-                    if (item.node1+item.node2 == element.data().id) {
+                    if (item.src_node+item.dest_node == element.data().id) {
                         needRemove = false;
                     }
                 });

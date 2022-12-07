@@ -320,8 +320,9 @@ impl LnSimulation {
 
     // Parse a file that contains a definition of a LN topology
     // This definition could be from a project like Polar or from dumping the network information from the mainnet
-    pub fn import_network(&self, filename: String) {
-        println!("LnSimulation:{} -- importing network definition from {}", get_current_time(), filename);
+    // The filename param is the json file of the network topology and import_map is the json file that maps nodes to a profile when importing
+    pub fn import_network(&self, filename: String, import_map: String) {
+        println!("LnSimulation:{} -- importing network definition from {}, with import map: {}", get_current_time(), filename, import_map);
         // TODO: Implement
     }
 

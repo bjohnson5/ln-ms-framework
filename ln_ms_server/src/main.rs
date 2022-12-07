@@ -288,7 +288,8 @@ pub mod api {
     // A request to import a network definition from a file
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct ImportNetworkRequest {
-        filename: String
+        filename: String,
+        import_map: String
     }
 
     // TODO: implement
@@ -306,7 +307,7 @@ pub mod api {
             // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
-                    s.import_network(import_request.filename);
+                    s.import_network(import_request.filename, import_request.import_map);
                     HttpResponse::Ok().body("Network Imported")
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before importing a network definition")
@@ -335,7 +336,7 @@ pub mod api {
             // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
-                    s.import_network(export_request.filename);
+                    s.export_network(export_request.filename);
                     HttpResponse::Ok().body("Network Imported")
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before importing a network definition")
