@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 // This struct holds all of the events that will take place over the duration of the simulation
 #[derive(Clone)]
 pub struct SimEventManager {
-    pub events: HashMap<u64, Vec<SimulationEvent>> 
+    events: HashMap<u64, Vec<SimulationEvent>> 
 }
 
 impl SimEventManager {

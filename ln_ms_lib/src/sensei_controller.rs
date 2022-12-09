@@ -2,7 +2,7 @@
 use crate::sim_event::SimulationEvent;
 use crate::sim_node::SimNode;
 use crate::sim_channel::SimChannel;
-use crate::nigiri_controller::NigiriController;
+use crate::nigiri_controller;
 
 // Standard modules
 use std::sync::Arc;
@@ -14,9 +14,9 @@ use tokio::sync::broadcast;
 
 // Sensei modules
 use senseicore::services::admin::{AdminRequest, AdminResponse, AdminService};
-use senseicore::services::node::NodeRequest;
-use entity::node;
+use senseicore::services::node::{NodeRequest, NodeResponse, NodeRequest::OpenChannels, OpenChannelRequest};
 use senseicore::node::LightningNode;
+use entity::node;
 
 // This struct holds the Sensei Admin Service and will process simulation events by controlling the Sensei nodes in the network
 #[derive(Clone)]
@@ -59,6 +59,7 @@ impl SenseiController {
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("SenseiController:{} -- running an OpenChannel event for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             // TODO: implement
+                            //self.open_channel(&channel.src_node, &channel.dest_node, channel.src_balance, channel.dest_balance).await;
                         },
                         SimulationEvent::SimulationEnded => {
                             println!("SenseiController:{} -- Simulation has ended", crate::get_current_time());
@@ -100,7 +101,7 @@ impl SenseiController {
                                     let address_resp = node.call(node_req).await.unwrap();
                                     match address_resp {
                                         senseicore::services::node::NodeResponse::GetUnusedAddress { address } => {
-                                            NigiriController::fund_address(address, 500);
+                                            nigiri_controller::fund_address(address, 500);
                                         }
                                         _ => println!("error getting unused address"),
                                     }
@@ -139,7 +140,7 @@ impl SenseiController {
                                     let address_resp = node.call(node_req).await.unwrap();
                                     match address_resp {
                                         senseicore::services::node::NodeResponse::GetUnusedAddress { address } => {
-                                            NigiriController::fund_address(address, n.1.initial_balance);
+                                            nigiri_controller::fund_address(address, n.1.initial_balance);
                                         }
                                         _ => println!("error getting unused address"),
                                     }
@@ -156,8 +157,11 @@ impl SenseiController {
             }
         }
 
-        // TODO: open all initial channels
         println!("create channels...");
+        // TODO: implement
+        //for c in channels {
+        //    self.open_channel(&c.src_node, &c.dest_node, c.src_balance, c.dest_balance).await;
+        //}
             
         // Stop the nodes that are not marked running at the start of the simulation
         println!("setting initial node states (start/stop)...");
@@ -196,7 +200,7 @@ impl SenseiController {
     }
 
     // Gets a sensei node from the node directory
-    pub async fn get_sensei_node(&self, name: &String) -> Result<Arc<LightningNode>, &str> {
+    async fn get_sensei_node(&self, name: &String) -> Result<Arc<LightningNode>, &str> {
         match self.get_sensei_node_model(name).await {
             Some(model) => {
                 let node_directory = self.sensei_admin_service.node_directory.lock().await;
@@ -216,7 +220,7 @@ impl SenseiController {
     }
 
     // Gets a sensei node from the database by username and returns an Option (None if the node was not found in the database)
-    pub async fn get_sensei_node_model(&self, name: &String) -> Option<node::Model> {
+    async fn get_sensei_node_model(&self, name: &String) -> Option<node::Model> {
         let db_node = self.sensei_admin_service
         .database
         .get_node_by_username(name)
@@ -233,7 +237,7 @@ impl SenseiController {
     }
 
     // Stop a sensei node
-    pub async fn stop_node(&self, name: &String) {
+    async fn stop_node(&self, name: &String) {
         match self.get_sensei_node_model(name).await {
             Some(model) => {
                 let id = String::from(model.id);
@@ -253,7 +257,7 @@ impl SenseiController {
     }
 
     // Start a sensei node
-    pub async fn start_node(&self, name: &String) {
+    async fn start_node(&self, name: &String) {
         match self.get_sensei_node_model(name).await {
             Some(model) => {
                 let id = String::from(model.id);
@@ -269,6 +273,57 @@ impl SenseiController {
             },
             None => {
                 println!("node not found in the database {}", name);
+            }
+        }
+    }
+
+    // Close a sensei channel
+    async fn _close_channel(&self) {
+        // TODO: implement
+    }
+
+    // Open a sensei channel
+    async fn _open_channel(&self, src_node_name: &String, dest_node_name: &String, src_amount: u64, dest_amount: u64) {
+        let dest_id: String;
+        match self.get_sensei_node_model(dest_node_name).await {
+            Some(model) => {
+                dest_id = String::from(model.id);
+            },
+            None => {
+                println!("dest node not found");
+                return;
+            }
+        }
+
+        match self.get_sensei_node(src_node_name).await {
+            Ok(node) => {
+                let mut open_requests: Vec<OpenChannelRequest> = Vec::new();
+                let open_chan_req = OpenChannelRequest {
+                    counterparty_pubkey: dest_id.clone(),
+                    amount_sats: src_amount+dest_amount,
+                    public: true,
+                    scid_alias: None,
+                    custom_id: None,
+                    push_amount_msats: Some(dest_amount/1000),
+                    counterparty_host_port: None,
+                    forwarding_fee_proportional_millionths: None,
+                    forwarding_fee_base_msat: None,
+                    cltv_expiry_delta: None,
+                    max_dust_htlc_exposure_msat: None,
+                    force_close_avoidance_max_fee_satoshis: None
+                };
+                open_requests.push(open_chan_req);
+                let open_chan = OpenChannels {
+                    requests: open_requests
+                };
+                let open_response = node.call(open_chan).await;
+                match open_response {
+                    Ok(NodeResponse::OpenChannels {requests: _, results: _}) => {},
+                    _ => println!("could not open channel for : {} -> {}", src_node_name, dest_node_name)
+                }
+            },
+            _ => {
+                println!("src node not found");
             }
         }
     }

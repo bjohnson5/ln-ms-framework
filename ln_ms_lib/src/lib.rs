@@ -15,7 +15,6 @@ use sim_event::SimulationEvent;
 use sim_runtime_graph::RuntimeNetworkGraph;
 use sim_utils::get_current_time;
 use sensei_controller::SenseiController;
-use nigiri_controller::NigiriController;
 
 // Standard Modules
 use std::collections::HashMap;
@@ -126,7 +125,7 @@ impl LnSimulation {
             if nigiri {
                 // Start bitcoind with nigiri
                 println!("starting bitcoind with nigiri...");
-                NigiriController::start();
+                nigiri_controller::start();
             }
 
             // Initialize the sensei database
@@ -254,7 +253,7 @@ impl LnSimulation {
             if nigiri {
                 // Stop bitcoind with nigiri
                 println!("stopping bitcoind with nigiri...");
-                NigiriController::stop();
+                nigiri_controller::stop();
             }
         });
 
@@ -266,46 +265,6 @@ impl LnSimulation {
         fs::remove_dir_all(sensei_data_dir_main.clone() + "/regtest").expect("File delete failed");
 
         Ok(())
-    }
-
-    // Listens for simulation events and updates the runtime network graph
-    pub async fn listen(&mut self, mut event_channel: broadcast::Receiver<SimulationEvent>) {
-        let mut running = true;
-        while running {
-            let event = event_channel.recv().await.unwrap();
-            match event {
-                SimulationEvent::NodeOfflineEvent(name) => {
-                    println!("LnSimulation:{} -- NodeOfflineEvent, updating network graph", get_current_time());
-                    for node in &mut self.network_graph.nodes {
-                        if node.name == name {
-                            node.running = false;
-                            break;
-                        }
-                    }
-                },
-                SimulationEvent::NodeOnlineEvent(name) => {
-                    println!("LnSimulation:{} -- NodeOnlineEvent, updating network graph", get_current_time());
-                    for node in &mut self.network_graph.nodes {
-                        if node.name == name {
-                            node.running = true;
-                            break;
-                        }
-                    }
-                },
-                SimulationEvent::CloseChannelEvent(channel) => {
-                    println!("LnSimulation:{} -- CloseChannelEvent, updating network graph", get_current_time());
-                    self.network_graph.channels.retain(|c| c.src_node != channel.src_node && c.dest_node != channel.dest_node);
-                },
-                SimulationEvent::OpenChannelEvent(channel) => {
-                    println!("LnSimulation:{} -- OpenChannelEvent, updating network graph", get_current_time());
-                    self.network_graph.channels.push(channel);
-                },
-                SimulationEvent::SimulationEnded => {
-                    println!("LnSimulation:{} -- SimulationEnded", get_current_time());
-                    running = false;
-                }
-            }
-        }
     }
 
     // Get the current network graph for the simulation
@@ -351,15 +310,15 @@ impl LnSimulation {
     }
 
     // Open a channel between two lightweight nodes in the simulated network
-    pub fn create_channel(&mut self, src: String, dest: String, amount: i32) {
+    pub fn create_channel(&mut self, src: String, dest: String, amount: u64) {
         println!("LnSimulation:{} -- open Channel: {} -> {} for {} sats", get_current_time(), src, dest, amount);
-        let channel1 = SimChannel {
+        let channel = SimChannel {
             src_node: src,
             dest_node: dest,
             src_balance: amount,
             dest_balance: 0
         };
-        self.user_channels.push(channel1);
+        self.user_channels.push(channel);
     }
 
     // TODO: There should be a generic create_event function that allows the user to create all supported events
@@ -380,21 +339,35 @@ impl LnSimulation {
     }
 
     // Create an event that will open a new channel between two nodes
-    pub fn create_open_channel_event(&mut self, src: String, dest: String, amount: i32, time: u64) {
+    pub fn create_open_channel_event(&mut self, src: String, dest: String, amount: u64, time: u64) {
         println!("LnSimulation:{} -- add OpenChannelEvent for: {} at {} seconds", get_current_time(), src, time);
-        let event = SimulationEvent::OpenChannelEvent(SimChannel{src_node: src, dest_node: dest, src_balance: amount, dest_balance: 0});
+        let event = SimulationEvent::OpenChannelEvent(
+            SimChannel{
+                src_node: src, 
+                dest_node: dest, 
+                src_balance: amount, 
+                dest_balance: 0
+            }
+        );
         self.add_event(event, time);
     }
 
     // Create an event that will close a channel between two nodes
-    pub fn create_close_channel_event(&mut self, src: String, dest: String, amount: i32, time: u64) {
+    pub fn create_close_channel_event(&mut self, src: String, dest: String, amount: u64, time: u64) {
         println!("LnSimulation:{} -- add CloseChannelEvent for: {} at {} seconds", get_current_time(), src, time);
-        let event = SimulationEvent::CloseChannelEvent(SimChannel{src_node: src, dest_node: dest, src_balance: amount, dest_balance: 0});
+        let event = SimulationEvent::CloseChannelEvent(
+            SimChannel{
+                src_node: src, 
+                dest_node: dest, 
+                src_balance: amount, 
+                dest_balance: 0
+            }
+        );
         self.add_event(event, time);
     }
 
     // Add a SimulationEvent to the list of events to execute
-    pub fn add_event(&mut self, event: SimulationEvent, time: u64) {
+    fn add_event(&mut self, event: SimulationEvent, time: u64) {
         if self.user_events.contains_key(&time) {
             let current_events = self.user_events.get_mut(&time).unwrap();
             current_events.push(event);
@@ -402,6 +375,46 @@ impl LnSimulation {
             let mut current_events: Vec<SimulationEvent> = Vec::new();
             current_events.push(event);
             self.user_events.insert(time, current_events);
+        }
+    }
+
+    // Listens for simulation events and updates the runtime network graph
+    async fn listen(&mut self, mut event_channel: broadcast::Receiver<SimulationEvent>) {
+        let mut running = true;
+        while running {
+            let event = event_channel.recv().await.unwrap();
+            match event {
+                SimulationEvent::NodeOfflineEvent(name) => {
+                    println!("LnSimulation:{} -- NodeOfflineEvent, updating network graph", get_current_time());
+                    for node in &mut self.network_graph.nodes {
+                        if node.name == name {
+                            node.running = false;
+                            break;
+                        }
+                    }
+                },
+                SimulationEvent::NodeOnlineEvent(name) => {
+                    println!("LnSimulation:{} -- NodeOnlineEvent, updating network graph", get_current_time());
+                    for node in &mut self.network_graph.nodes {
+                        if node.name == name {
+                            node.running = true;
+                            break;
+                        }
+                    }
+                },
+                SimulationEvent::CloseChannelEvent(channel) => {
+                    println!("LnSimulation:{} -- CloseChannelEvent, updating network graph", get_current_time());
+                    self.network_graph.channels.retain(|c| c.src_node != channel.src_node && c.dest_node != channel.dest_node);
+                },
+                SimulationEvent::OpenChannelEvent(channel) => {
+                    println!("LnSimulation:{} -- OpenChannelEvent, updating network graph", get_current_time());
+                    self.network_graph.channels.push(channel);
+                },
+                SimulationEvent::SimulationEnded => {
+                    println!("LnSimulation:{} -- SimulationEnded", get_current_time());
+                    running = false;
+                }
+            }
         }
     }
 }

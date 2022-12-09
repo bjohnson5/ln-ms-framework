@@ -189,7 +189,7 @@ pub mod api {
     pub struct CreateChannelRequest {
         src_name: String,
         dest_name: String,
-        amount: i32
+        amount: u64
     }
 
     #[utoipa::path(
@@ -220,7 +220,7 @@ pub mod api {
         event_type: String,
         src_name: String,
         dest_name: String,
-        amount: i32,
+        amount: u64,
         time: u64
     }
 
