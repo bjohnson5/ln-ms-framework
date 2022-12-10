@@ -6,5 +6,7 @@ The two demo videos show the simulation library API being used through a web cli
 Each of the simulation nodes in the network graph that is shown is backed by a Sensei node and is completely capable of accepting peer connections, opening/closing channels, and making payments.
 
 ## Memory Demo
+https://user-images.githubusercontent.com/23157382/206827940-3ede7c7a-ce69-4ef2-868d-3c4958a62cb1.mp4
 
 ## Event Demo
+https://user-images.githubusercontent.com/23157382/206827946-36233728-81aa-49ef-a9fe-a428698c60e5.mp4
