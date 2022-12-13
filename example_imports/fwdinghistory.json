@@ -1,0 +1,17 @@
+{
+    "forwarding_events": [
+        {
+            "timestamp": "1670949406",
+            "chan_id_in": "134140418654209",
+            "chan_id_out": "140737488420865",
+            "amt_in": "50001",
+            "amt_out": "50000",
+            "fee": "1",
+            "fee_msat": "1050",
+            "amt_in_msat": "50001050",
+            "amt_out_msat": "50000000",
+            "timestamp_ns": "1670949406616970019"
+        }
+    ],
+    "last_offset_index": 1
+}

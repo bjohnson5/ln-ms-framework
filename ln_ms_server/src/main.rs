@@ -22,7 +22,8 @@ async fn main() -> std::io::Result<()> {
             api::create_event,
             api::run_sim,
             api::import_network,
-            api::export_network
+            api::export_network,
+            api::import_transactions
         ),
         components(schemas(
             api::CreateSimRequest,
@@ -31,7 +32,8 @@ async fn main() -> std::io::Result<()> {
             api::CreateEventRequest,
             api::RunSimulationRequest,
             api::ImportNetworkRequest,
-            api::ExportNetworkRequest
+            api::ExportNetworkRequest,
+            api::ImportTransactionsRequest
         )
         )
     )]
@@ -248,6 +250,8 @@ pub mod api {
                         s.create_open_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
                     } else if create_event_req.event_type == "CloseChannelEvent"{
                         s.create_close_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
+                    } else if create_event_req.event_type == "TransactionEvent" {
+                        s.create_transaction_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
                     }
                     HttpResponse::Ok().body("Event Created")
                 }
@@ -343,4 +347,33 @@ pub mod api {
             }   
         }
     }
+
+    // A request to import a list of transactions from a file
+    #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
+    pub struct ImportTransactionsRequest {
+        filename: String
+    }
+
+    // TODO: implement
+    #[utoipa::path(
+        request_body = ImportTransactionsRequest,
+        responses(
+            (status = 200, description = "Transactions successfully imported", body = String),
+            (status = 404, description = "Simulation not found", body = String)
+        )
+    )]
+    #[post("/import_transactions")]
+    pub async fn import_transactions(req: Json<ImportTransactionsRequest>) -> impl Responder {
+        let import_request = req.into_inner();
+        unsafe {
+            // TODO: get the simulation object from a database and do not use a static global unsafe variable
+            match SIM.as_mut() {
+                Some(s) => {
+                    s.import_transactions(import_request.filename);
+                    HttpResponse::Ok().body("Transactions Imported")
+                }
+                None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before importing transactions")
+            }   
+        }
+    }    
 }

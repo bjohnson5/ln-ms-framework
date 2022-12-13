@@ -55,18 +55,24 @@ impl SenseiController {
                         SimulationEvent::CloseChannelEvent(channel) => {
                             println!("SenseiController:{} -- running a CloseChannel event for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             // TODO: implement
+                            //self.close_channel().await;
                         },
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("SenseiController:{} -- running an OpenChannel event for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             // TODO: implement
                             //self.open_channel(&channel.src_node, &channel.dest_node, channel.src_balance, channel.dest_balance).await;
                         },
-                        SimulationEvent::SimulationEnded => {
+                        SimulationEvent::TransactionEvent(tx) => {
+                            println!("LnSimulation:{} -- running a TransactionEvent for {} <-> {}", crate::get_current_time(), tx.src_node, tx.dest_node);
+                            // TODO: implement
+                            // TODO: create an invoice from dest_node (NodeRequest::GetInvoice), send payment from src_node (NodeRequest::SendPayment)
+                        }
+                        SimulationEvent::SimulationEndedEvent => {
                             println!("SenseiController:{} -- Simulation has ended", crate::get_current_time());
                             self.sensei_admin_service.stop_signal.store(true, Ordering::Release);
                             let _res = self.sensei_admin_service.stop().await;                          
                             running = false;
-                        }
+                        },
                     }
                 }
             })

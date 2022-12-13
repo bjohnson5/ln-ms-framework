@@ -44,6 +44,6 @@ impl SimEventManager {
             current_sec += 1;
             thread::sleep(one_sec);
         }
-        event_channel.send(SimulationEvent::SimulationEnded).expect("could not send the simulation ended event");
+        event_channel.send(SimulationEvent::SimulationEndedEvent).expect("could not send the simulation ended event");
     }
 }

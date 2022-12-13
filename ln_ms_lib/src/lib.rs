@@ -1,6 +1,7 @@
 // Project Modules
 mod sim_node;
 mod sim_channel;
+mod sim_transaction;
 mod sim_event;
 mod sim_event_manager;
 mod sim_runtime_graph;
@@ -11,6 +12,7 @@ mod nigiri_controller;
 use sim_node::SimNode;
 use sim_event_manager::SimEventManager;
 use sim_channel::SimChannel;
+use sim_transaction::SimTransaction;
 use sim_event::SimulationEvent;
 use sim_runtime_graph::RuntimeNetworkGraph;
 use sim_utils::get_current_time;
@@ -278,7 +280,7 @@ impl LnSimulation {
     }
 
     // Parse a file that contains a definition of a LN topology
-    // This definition could be from a project like Polar or from dumping the network information from the mainnet
+    // This definition could be from a project like Polar or from dumping the network information from the mainnet (lncli describegraph)
     // The filename param is the json file of the network topology and import_map is the json file that maps nodes to a profile when importing
     pub fn import_network(&self, filename: String, import_map: String) {
         println!("LnSimulation:{} -- importing network definition from {}, with import map: {}", get_current_time(), filename, import_map);
@@ -288,6 +290,13 @@ impl LnSimulation {
     // Export the network to a json file that can be loaded later
     pub fn export_network(&self, filename: String) {
         println!("LnSimulation:{} -- exporting network definition from {}", get_current_time(), filename);
+        // TODO: Implement
+    }
+
+    // Parse a file that contains transactions
+    // This could be from payment information from the mainnet (lncli fwdinghistory)
+    pub fn import_transactions(&self, filename: String) {
+        println!("LnSimulation:{} -- importing transactions from {}", get_current_time(), filename);
         // TODO: Implement
     }
 
@@ -366,6 +375,19 @@ impl LnSimulation {
         self.add_event(event, time);
     }
 
+    // Create a transaction for a given amount between two nodes
+    pub fn create_transaction_event(&mut self, src: String, dest:String, amount: u64, time: u64) {
+        println!("LnSimulation:{} -- add TransactionEvent for: {} at {} seconds", get_current_time(), src, time);
+        let event = SimulationEvent::TransactionEvent(
+            SimTransaction{
+                src_node: src,
+                dest_node: dest,
+                amount: amount
+            }
+        );
+        self.add_event(event, time);
+    }
+
     // Add a SimulationEvent to the list of events to execute
     fn add_event(&mut self, event: SimulationEvent, time: u64) {
         if self.user_events.contains_key(&time) {
@@ -410,9 +432,12 @@ impl LnSimulation {
                     println!("LnSimulation:{} -- OpenChannelEvent, updating network graph", get_current_time());
                     self.network_graph.channels.push(channel);
                 },
-                SimulationEvent::SimulationEnded => {
+                SimulationEvent::SimulationEndedEvent => {
                     println!("LnSimulation:{} -- SimulationEnded", get_current_time());
                     running = false;
+                },
+                _ => {
+                    println!("LnSimulation:{} -- Other Event", get_current_time());
                 }
             }
         }
