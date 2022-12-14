@@ -134,11 +134,15 @@ impl LnSimulation {
             println!("starting sensei database...");
             let mut sensei_db_options = ConnectOptions::new(config.database_url.clone());
             sensei_db_options
-            .max_connections(100)
-            .min_connections(10)
-            .connect_timeout(Duration::new(30, 0));
-            let sensei_db_conn = Database::connect(sensei_db_options).await.expect("unable to connect to sensei database");
-            Migrator::up(&sensei_db_conn, None).await.expect("unable to run migrations");
+                .max_connections(100)
+                .min_connections(10)
+                .connect_timeout(Duration::new(30, 0));
+            let sensei_db_conn = Database::connect(sensei_db_options)
+                .await
+                .expect("unable to connect to sensei database");
+            Migrator::up(&sensei_db_conn, None)
+                .await
+                .expect("unable to run migrations");
             let sensei_database = SenseiDatabase::new(sensei_db_conn, sensei_db_runtime_handle);
 
             // Initialize the bitcoin client
@@ -453,15 +457,15 @@ mod tests {
         // Setup the simulation
         let mut ln_sim = LnSimulation::new(String::from("test"), 10, 5);
         
-        ln_sim.create_node(String::from("blake"), 500, false);
-        ln_sim.create_node(String::from("brianna"), 600, false);
-        ln_sim.create_node(String::from("brooks"), 700, false);
-        ln_sim.create_node(String::from("clay"), 800, false);
-        ln_sim.create_channel(String::from("blake"), String::from("brianna"), 500);
-        ln_sim.create_node_online_event(String::from("blake"), 3);
-        ln_sim.create_node_online_event(String::from("brianna"), 3);
-        ln_sim.create_node_offline_event(String::from("blake"), 6);
-        ln_sim.create_node_offline_event(String::from("brianna"), 8);
+        ln_sim.create_node(String::from("node1"), 500, false);
+        ln_sim.create_node(String::from("node2"), 600, false);
+        ln_sim.create_node(String::from("node3"), 700, false);
+        ln_sim.create_node(String::from("node4"), 800, false);
+        ln_sim.create_channel(String::from("node1"), String::from("node2"), 500);
+        ln_sim.create_node_online_event(String::from("node1"), 3);
+        ln_sim.create_node_online_event(String::from("node2"), 3);
+        ln_sim.create_node_offline_event(String::from("node1"), 6);
+        ln_sim.create_node_offline_event(String::from("node2"), 8);
         
         assert_eq!(ln_sim.user_channels.len(), 1);
         assert_eq!(ln_sim.user_nodes.len(), 4);
