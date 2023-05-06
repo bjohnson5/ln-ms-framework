@@ -4,13 +4,12 @@ use actix_web::{App, HttpServer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{SwaggerUi, Url};
 
-// ==================================================================================================================
-// NOTE: This project is currently setup as a Proof of Concept and does not accurately simulate any LN operations yet
-// ==================================================================================================================
+/*
+ * This is the main entry point for the simulation web server. This module exposes the ln_ms_lib library api to a web client.
+ */
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-
     #[derive(OpenApi)]
     #[openapi(
         paths(
@@ -79,17 +78,18 @@ pub mod api {
     use serde::{Deserialize, Serialize};
     use utoipa::{ToSchema};
 
-    // TODO: this is just for demonstration purposes and testing, a front end framework should be used to create the UI
+    // Gets the network graph in order to show it in the browser
     #[get("/network_monitor")]
     pub async fn network_monitor() -> Result<HttpResponse> {
-        // response
         Ok(HttpResponse::Ok()
             .content_type("text/html; charset=utf-8")
             .body(include_str!("../static/network_monitor.html")))
     }
 
-    // TODO: this will not be a global variable, each endpoint will get the LnSimulation object from the database
-    //       for simplicity it will be used as a global variable right now in order to demonstate the use case
+    /* 
+     * TODO: this will not be a global variable, each endpoint will get the LnSimulation object from the database
+     * - for simplicity it will be used as a global variable right now in order to demonstate the use case
+     */
     static mut SIM: Option<LnSimulation> = None;
 
     // TODO: implement
@@ -160,7 +160,7 @@ pub mod api {
     #[derive(Serialize, Deserialize, ToSchema, Clone, Debug)]
     pub struct CreateNodeRequest {
         name: String,
-        initial_balance: i32,
+        initial_balance: u64,
         running: bool
     }
 
@@ -191,7 +191,8 @@ pub mod api {
     pub struct CreateChannelRequest {
         src_name: String,
         dest_name: String,
-        amount: u64
+        amount: u64,
+        id: u64
     }
 
     #[utoipa::path(
@@ -208,7 +209,7 @@ pub mod api {
             // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
-                    s.create_channel(create_channel_req.src_name, create_channel_req.dest_name, create_channel_req.amount);
+                    s.create_channel(create_channel_req.src_name, create_channel_req.dest_name, create_channel_req.amount, create_channel_req.id);
                     HttpResponse::Ok().body("Created Channel")
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before creating a channel")
@@ -223,7 +224,8 @@ pub mod api {
         src_name: String,
         dest_name: String,
         amount: u64,
-        time: u64
+        time: u64,
+        channel_id: u64
     }
 
     #[utoipa::path(
@@ -241,15 +243,14 @@ pub mod api {
             match SIM.as_mut() {
                 Some(s) => {
                     // TODO: this will need to be much more generic and the request will need to only allow supported events
-                    //       this is for simplicity while creating a proof of concept
                     if create_event_req.event_type == "NodeOfflineEvent" {
-                        s.create_node_offline_event(create_event_req.src_name, create_event_req.time);
+                        s.create_stop_node_event(create_event_req.src_name, create_event_req.time);
                     } else if create_event_req.event_type == "NodeOnlineEvent"{
-                        s.create_node_online_event(create_event_req.src_name, create_event_req.time);
+                        s.create_start_node_event(create_event_req.src_name, create_event_req.time);
                     } else if create_event_req.event_type == "OpenChannelEvent"{
-                        s.create_open_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
+                        s.create_open_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time, create_event_req.channel_id);
                     } else if create_event_req.event_type == "CloseChannelEvent"{
-                        s.create_close_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
+                        s.create_close_channel_event(create_event_req.src_name, create_event_req.channel_id, create_event_req.time);
                     } else if create_event_req.event_type == "TransactionEvent" {
                         s.create_transaction_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
                     }

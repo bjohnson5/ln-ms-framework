@@ -7,5 +7,6 @@ pub struct SimChannel {
     pub src_node: String,
     pub dest_node: String,
     pub src_balance: u64,
-    pub dest_balance: u64
+    pub dest_balance: u64,
+    pub id: u64
 }
