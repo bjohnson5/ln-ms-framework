@@ -1,5 +1,5 @@
 // Project Modules
-use crate::sim_event::SimulationEvent;
+use crate::sim_event::{SimulationEvent, SimEvent};
 
 // Standard Modules
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ impl SimEventManager {
      *   to allow for faster-than-real-time simulation runs
      */
     // Send SimulationEvent objects through the event channel at the correct simulation time
-    pub fn run(&self, duration: u64, event_channel: broadcast::Sender<SimulationEvent>) {
+    pub fn run(&self, duration: u64, event_channel: broadcast::Sender<SimEvent>) {
         println!("[=== SimEventManager === {}] Running SimEventManager for {} seconds", crate::get_current_time(), duration);
         let one_sec = time::Duration::from_secs(1);
         let mut current_sec = 0;
@@ -42,13 +42,15 @@ impl SimEventManager {
                 let current_events = &self.events[&current_sec];
                 let current_events_iter = current_events.iter();
                 for e in current_events_iter {
-                    event_channel.send(e.clone()).expect("could not send the event");
+                    let sim_event = SimEvent{sim_time: current_sec.clone(), event: e.clone()};
+                    event_channel.send(sim_event).expect("could not send the event");
                 }
             }
 
             current_sec += 1;
             thread::sleep(one_sec);
         }
-        event_channel.send(SimulationEvent::SimulationEndedEvent).expect("could not send the simulation ended event");
+        let sim_event = SimEvent{sim_time: duration, event: SimulationEvent::SimulationEndedEvent};
+        event_channel.send(sim_event).expect("could not send the simulation ended event");
     }
 }
