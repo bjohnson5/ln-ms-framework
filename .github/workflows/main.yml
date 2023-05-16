@@ -12,6 +12,18 @@ jobs:
         uses: vulpemventures/nigiri-github-action@master
         with:
           use_liquid: false
+      - name: Checkout sensei
+        uses: actions/checkout@v3
+        with:
+          repository: bjohnson5/sensei
+          ref: simulation-dev
+          path: sensei
+      - name: Checkout rust-lightning
+        uses: actions/checkout@v3
+        with:
+          repository: bjohnson5/rust-lightning
+          ref: 36bffb56e8b738ca5ccb7056594e956fddc02573
+          path: rust-lightning
       - name: Checkout ln-ms-framework
         uses: actions/checkout@v3
         with:
@@ -22,5 +34,5 @@ jobs:
         run: cargo build
         working-directory: ln-ms-framework/ln_ms_server
       - name: Test
-        run: cargo test
+        run: cargo test -- --show-output
         working-directory: ln-ms-framework/ln_ms_lib

@@ -10,6 +10,7 @@ mod sensei_controller;
 mod nigiri_controller;
 mod network_analyzer;
 mod sim_node_status;
+mod sim_results;
 
 use sim_node::SimNode;
 use sim_event_manager::SimEventManager;
@@ -23,6 +24,7 @@ use sim_utils::get_current_time;
 use sim_utils::cleanup_sensei;
 use sensei_controller::SenseiController;
 use network_analyzer::NetworkAnalyzer;
+use sim_results::SimResults;
 
 // Standard Modules
 use std::collections::HashMap;
@@ -80,7 +82,7 @@ impl LnSimulation {
     }
 
     // Run the Lightning Network Simulation
-    pub fn run(&mut self, nigiri: bool) -> Result<String> {
+    pub fn run(&mut self, nigiri: bool) -> Result<SimResults> {
         println!("[=== LnSimulation === {}] Starting simulation: {} for {} seconds", get_current_time(), self.name, self.duration);
         let d = self.duration.clone();
 
@@ -133,7 +135,7 @@ impl LnSimulation {
         // Setup the network graph main runtime
         let network_graph_runtime = Builder::new_multi_thread()
             .worker_threads(20)
-            .thread_name("network map")
+            .thread_name("network graph")
             .enable_all()
             .build()?;
         let network_graph_runtime_handle = network_graph_runtime.handle().clone();
@@ -177,7 +179,7 @@ impl LnSimulation {
                     config.bitcoind_rpc_username.clone(),
                     config.bitcoind_rpc_password.clone(),
                     tokio::runtime::Handle::current(),
-                )
+                ) // TODO: this starts a thread that does not always get stopped, handling the error in sensei for now
                 .await
                 .expect("could not connect to to bitcoind"),
             );
@@ -212,7 +214,7 @@ impl LnSimulation {
             );
 
             // Create the network analyzer
-            let network_analyzer = NetworkAnalyzer::new(analyzer_runtime_handle);
+            let mut network_analyzer = NetworkAnalyzer::new(analyzer_runtime_handle);
 
             // Create the sensei controller
             let mut sensei_controller = SenseiController::new(sensei_admin_service, sensei_runtime_handle);
@@ -236,6 +238,10 @@ impl LnSimulation {
             // Set up the initial runtime network graph
             println!("[=== LnSimulation === {}] Initializing the runtime network graph", get_current_time());
             self.network_graph.update(&self.user_nodes, &self.user_channels, self.num_sim_nodes);
+
+            // Set up the initial results
+            println!("[=== LnSimulation === {}] Initializing the network analyzer", get_current_time());
+            network_analyzer.initialize_network(&self.network_graph, &sensei_controller).await;
 
             // Create the channels for threads to communicate over
             let (sim_event_sender, _): (broadcast::Sender<SimEvent>, broadcast::Receiver<SimEvent>) = broadcast::channel(1024);
@@ -305,7 +311,7 @@ impl LnSimulation {
                 }
             });
 
-            let results = network_analyzer.get_sim_results().clone();
+            let results = network_analyzer.get_sim_results();
 
             // Clear the runtime network graph
             self.network_graph.nodes.clear();
@@ -543,34 +549,164 @@ mod tests {
 
     #[test]
     fn it_works() {
-        // Setup the simulation
-        let mut ln_sim = LnSimulation::new(String::from("test"), 60, 5);
+        /*
+         * This simulation will have 5 sim nodes and 4 user nodes.
+         * In this sim node1 is attempting to send 8000 sats to node2.
+         * TODO:    The current configuration of sensei uses the default value for max_inbound_htlc_value_in_flight_percent_of_channel when initiating a new channel or opening a channel from a request
+         *          The default max_inbound_htlc_value_in_flight_percent_of_channel is 10 meaning that each channel we open can only be used to send 10% of the total channel balance.
+         *          This can be changed in sensei to allow for larger percentages, and eventually this library will need to allow this value to be configured.
+         *          For now, we will use the default to make the github action simple (it uses the sensei github project as a dependency)
+         * In order to send the 8000 sats, node1 must open enough channels to make a multi-path payment to node2
+         * The nodes will start up, get initial funding, open channels and wait.
+         * At 10 seconds, the payment will be attempted
+         * At 20 seconds, all the channels will be closed
+         * At 25 seconds, all the nodes will be stopped
+         * At 30 seconds, the simulation will end
+         * 
+         * Then we can verify what happened in the simulation using the output from the run() function.
+         */
+
+        let mut ln_sim = LnSimulation::new(String::from("test"), 30, 5);
         
-        ln_sim.create_node(String::from("node1"), 60000, true);
-        ln_sim.create_node(String::from("node2"), 40000, true);
-        let chan1 = ln_sim.create_channel(String::from("node1"), String::from("node2"), 50000, 55);
+        ln_sim.create_node(String::from("node1"), 200000, true);
+        ln_sim.create_node(String::from("node2"), 0, true);
+        ln_sim.create_node(String::from("node3"), 200000, true);
+        ln_sim.create_node(String::from("node4"), 200000, true);
+
+        let chan1 = ln_sim.create_channel(String::from("node1"), String::from("node2"), 40000, 1);
         match chan1 {
             Some(c) => {
-                ln_sim.create_close_channel_event(c, 30);
+                ln_sim.create_close_channel_event(c, 20);
             },
             None => {}
         }
 
-        /*
-         * TODO:
-         * We can only send 10% of the total channel balance... WTF??
-         * The routing algo always says:
-         * ERROR: failed to find route: Failed to find a sufficient route to the given destination
-         * The routing path is found from the destination to the source, and the destination always has 10% capacity, why??
-         */
-        ln_sim.create_transaction_event(String::from("node1"), String::from("node2"), 5000, 13);
+        let chan2 = ln_sim.create_channel(String::from("node1"), String::from("node3"), 40000, 2);
+        match chan2 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 20);
+            },
+            None => {}
+        }
 
-        ln_sim.create_stop_node_event(String::from("node1"), 40);
-        ln_sim.create_stop_node_event(String::from("node2"), 50);
-        
+        let chan3 = ln_sim.create_channel(String::from("node1"), String::from("node4"), 40000, 3);
+        match chan3 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 20);
+            },
+            None => {}
+        }
+
+        let chan4 = ln_sim.create_channel(String::from("node4"), String::from("node2"), 100000, 4);
+        match chan4 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 20);
+            },
+            None => {}
+        }
+
+        let chan5 = ln_sim.create_channel(String::from("node3"), String::from("node2"), 100000, 5);
+        match chan5 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 20);
+            },
+            None => {}
+        }
+
+        ln_sim.create_transaction_event(String::from("node1"), String::from("node2"), 8000, 10);
+
+        ln_sim.create_stop_node_event(String::from("node1"), 25);
+        ln_sim.create_stop_node_event(String::from("node2"), 25);
+        ln_sim.create_stop_node_event(String::from("node3"), 25);
+        ln_sim.create_stop_node_event(String::from("node4"), 25);
+
         // Start the simulation
-        let success = ln_sim.run(true);
-        assert_eq!(success.is_ok(), true);
-        assert_eq!(success.unwrap(), String::from("test"));
+        let sim_results = ln_sim.run(true);
+        match sim_results {
+            Ok(res) => {
+                // check results
+                let time_start = 0;
+                //let time_after_payment = 15;
+                //let time_after_stop = 28;
+                let node1 = String::from("node1");
+                let node2 = String::from("node2");
+                let node3 = String::from("node3");
+                let node4 = String::from("node4");
+
+                // balances at start of sim
+                let bal1_on = res.balance.on_chain.get(&time_start).unwrap().get(&node1).unwrap();
+                let bal1_off = res.balance.off_chain.get(&time_start).unwrap().get(&node1).unwrap();
+                assert!(bal1_on < &80000);
+                assert_eq!(bal1_off, &120000);
+
+                let bal2_on = res.balance.on_chain.get(&time_start).unwrap().get(&node2).unwrap();
+                let bal2_off = res.balance.off_chain.get(&time_start).unwrap().get(&node2).unwrap();
+                assert_eq!(bal2_on, &0);
+                assert_eq!(bal2_off, &0);
+                
+                let bal3_on = res.balance.on_chain.get(&time_start).unwrap().get(&node3).unwrap();
+                let bal3_off = res.balance.off_chain.get(&time_start).unwrap().get(&node3).unwrap();
+                assert!(bal3_on < &100000);
+                assert_eq!(bal3_off, &100000);
+                
+                let bal4_on = res.balance.on_chain.get(&time_start).unwrap().get(&node4).unwrap();
+                let bal4_off = res.balance.off_chain.get(&time_start).unwrap().get(&node4).unwrap();
+                assert!(bal4_on < &100000);
+                assert_eq!(bal4_off, &100000);
+
+                let status1 = res.status.nodes.get(&time_start).unwrap().get(&node1).unwrap();
+                let status2 = res.status.nodes.get(&time_start).unwrap().get(&node2).unwrap();
+                let status3 = res.status.nodes.get(&time_start).unwrap().get(&node3).unwrap();
+                let status4 = res.status.nodes.get(&time_start).unwrap().get(&node4).unwrap();
+
+                // status of each node at the start of the sim
+                assert_eq!(status1, &true);
+                assert_eq!(status2, &true);
+                assert_eq!(status3, &true);
+                assert_eq!(status4, &true);
+                
+                // number open channels at start of sim
+                let num_chan = res.channels.open_channels.get(&time_start).unwrap().len();
+                assert_eq!(num_chan, 5);
+
+                /*
+                // balances after payment
+                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node1).unwrap(), &112000);
+                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node2).unwrap(), &8000);
+                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node3).unwrap(), &100000);
+                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node4).unwrap(), &100000);
+
+                // channel balances after payment
+                let mut src_balance = 0;
+                let mut dest_balance = 0;
+                for c in res.channels.open_channels.get(&time_after_payment).unwrap() {
+                    if c.id == 1 {
+                        src_balance = c.src_balance;
+                        dest_balance = c.dest_balance;
+                        break;
+                    }
+                }
+                assert_eq!(src_balance, 36000);
+                assert_eq!(dest_balance, 4000);
+
+                // status of each node at the end of the sim
+                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node1).unwrap(), &false);
+                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node2).unwrap(), &false);
+                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node3).unwrap(), &false);
+                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node4).unwrap(), &false);
+
+                // number open channels at end of sim
+                assert_eq!(res.channels.open_channels.get(&time_after_stop).unwrap().len(), 0);
+
+                // number of transactions in the sim
+                assert_eq!(res.transactions.txs.len(), 1);
+                */
+            },
+            Err(e) => {
+                // fail the test
+                println!("Test failed due to error: {:?}", e);
+                assert_eq!(true, false);
+            }
+        }
     }
 }

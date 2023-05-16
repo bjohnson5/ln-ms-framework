@@ -202,7 +202,7 @@ impl SenseiController {
             match self.sensei_admin_service.call(create_node_req).await {
                 Ok(response) => match response {
                     AdminResponse::CreateNode { .. } => {
-                        // TODO: fund the simulation node with the configured amount. 500 is a place holder for now.
+                        // TODO: fund the simulation node with the configured amount. 1 BTC is a place holder for now.
                         if nigiri {
                             match self.get_sensei_node(&node_name).await {
                                 Ok(node) => {
@@ -211,7 +211,7 @@ impl SenseiController {
                                         Ok(r) => {
                                             match r {
                                                 NodeResponse::GetUnusedAddress { address } => {
-                                                    nigiri_controller::fund_address(address, 500);
+                                                    nigiri_controller::fund_address(address, 1_000_000_000);
                                                 },
                                                 _ => println!("not an expected response from GetUnusedAddress")
                                             }
@@ -290,6 +290,9 @@ impl SenseiController {
                 }
             }
         }
+
+        // The sensei chain manager updates once a second. We need to wait and make sure all commitment txs are seen by the chain manager.
+        tokio::time::sleep(Duration::from_secs(1)).await;
             
         // Stop the nodes that are not marked running at the start of the simulation
         println!("[=== SenseiController === {}] Setting the initial state of each node", crate::get_current_time());
@@ -305,9 +308,8 @@ impl SenseiController {
         }
     }
 
-    // Get a nodes total balance, payments, and channels by name
-    // TODO: This should return a data structure with node status
-    async fn get_node_status(&self, name: &String) -> Option<SimNodeStatus> {
+    // Get a nodes total balance and channels by name
+    pub async fn get_node_status(&self, name: &String) -> Option<SimNodeStatus> {
         let mut status = SimNodeStatus::new();
 
         match self.get_sensei_node(name).await {

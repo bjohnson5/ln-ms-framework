@@ -1,25 +1,66 @@
+use std::collections::HashMap;
+
 // Project modules
 use crate::sim_event::SimResultsEvent;
 use crate::sim_event::SimulationEvent;
+use crate::sim_results::SimResults;
+use crate::sim_runtime_graph::RuntimeNetworkGraph;
+use crate::sensei_controller::SenseiController;
+use crate::sim_channel::SimChannel;
 
 // External modules
 use tokio::sync::broadcast;
 
 pub struct NetworkAnalyzer {
-    analyzer_runtime_handle: tokio::runtime::Handle
+    analyzer_runtime_handle: tokio::runtime::Handle,
+    results: SimResults
 }
 
 impl NetworkAnalyzer {
     // Create a new NetworkAnalyzer
     pub fn new(runtime_handle: tokio::runtime::Handle) -> Self {
         let analyzer = NetworkAnalyzer {
-            analyzer_runtime_handle: runtime_handle
+            analyzer_runtime_handle: runtime_handle,
+            results: SimResults::new()
         };
 
         analyzer
     }
 
-    // Receive results events and make the appropriate calls to the Sensei library
+    pub async fn initialize_network(&mut self, network: &RuntimeNetworkGraph, sensei_controller: &SenseiController) {
+        // Initialize balances and status
+        self.results.balance.on_chain.insert(0, HashMap::new());
+        self.results.balance.off_chain.insert(0, HashMap::new());
+        self.results.status.nodes.insert(0, HashMap::new());
+        for n in &network.nodes {
+            println!("{}",n.name);
+            let status = sensei_controller.get_node_status(&n.name).await;
+            match status {
+                Some(s) => {
+                    println!("{} {} {}", s.balance.onchain, s.balance.offchain, n.running);
+                    self.results.balance.on_chain.get_mut(&0).unwrap().insert(n.name.clone(), s.balance.onchain);
+                    self.results.balance.off_chain.get_mut(&0).unwrap().insert(n.name.clone(), s.balance.offchain);
+                    self.results.status.nodes.get_mut(&0).unwrap().insert(n.name.clone(), n.running);
+                },
+                None => {}
+            }
+        }
+
+        // Initialize channels
+        self.results.channels.open_channels.insert(0, Vec::new());
+        for c in &network.channels {
+            let sc = SimChannel {
+                src_node: c.src_node.clone(),
+                dest_node: c.dest_node.clone(),
+                src_balance: c.src_balance.clone(),
+                dest_balance: c.dest_balance.clone(),
+                id: c.id.clone()
+            };
+            self.results.channels.open_channels.get_mut(&0).unwrap().push(sc);
+        }
+    }
+
+    // Receive results events and update the results
     pub fn process_events(&self, mut results_channel: broadcast::Receiver<SimResultsEvent>) {
         // This is the main thread for processing result events
          tokio::task::block_in_place(move || {
@@ -82,7 +123,7 @@ impl NetworkAnalyzer {
         });
     }
 
-    pub fn get_sim_results(&self) -> String {
-        String::from("test")
+    pub fn get_sim_results(&self) -> SimResults {
+        self.results.clone()
     }
 }

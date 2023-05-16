@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-senseicore = { git = "https://github.com/L2-Technology/sensei", rev = "1890787c11a4882338c7380e6125d760a2322242" }
-migration = { git = "https://github.com/L2-Technology/sensei", rev = "1890787c11a4882338c7380e6125d760a2322242" }
-entity = { git = "https://github.com/L2-Technology/sensei", rev = "1890787c11a4882338c7380e6125d760a2322242" }
+senseicore = { path = "../../sensei/senseicore" }
+migration = { path = "../../sensei/migration" }
+entity = { path = "../../sensei/entity" }
 signal-hook = "0.3.14"
 chrono = "0.4"
 tokio = { version = "^1.0", features = [ "io-util", "macros", "rt", "rt-multi-thread", "sync", "net", "time" ] }

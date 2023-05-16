@@ -31,7 +31,7 @@ pub fn mine() {
     .arg("-c")
     .arg("nigiri rpc -generate 10")
     .output()
-    .expect("failed to execute stop process");
+    .expect("failed to execute mine process");
 }
 
 // Send bitcoin to an address and mine a block
