@@ -33,11 +33,9 @@ impl NetworkAnalyzer {
         self.results.balance.off_chain.insert(0, HashMap::new());
         self.results.status.nodes.insert(0, HashMap::new());
         for n in &network.nodes {
-            println!("{}",n.name);
             let status = sensei_controller.get_node_status(&n.name).await;
             match status {
                 Some(s) => {
-                    println!("{} {} {}", s.balance.onchain, s.balance.offchain, n.running);
                     self.results.balance.on_chain.get_mut(&0).unwrap().insert(n.name.clone(), s.balance.onchain);
                     self.results.balance.off_chain.get_mut(&0).unwrap().insert(n.name.clone(), s.balance.offchain);
                     self.results.status.nodes.get_mut(&0).unwrap().insert(n.name.clone(), n.running);
