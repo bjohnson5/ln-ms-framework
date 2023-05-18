@@ -7,6 +7,8 @@ use crate::sim_channel::SimChannel;
 use crate::nigiri_controller;
 use crate::sim_node_status::SimNodeStatus;
 use crate::sim_node_status::SimNodeChannel;
+use crate::sim_transaction::SimTransaction;
+use crate::sim_transaction::SimTransactionStatus;
 
 // Standard modules
 use std::sync::Arc;
@@ -16,6 +18,7 @@ use std::time::Duration;
 
 // External modules
 use tokio::sync::broadcast;
+use lightning::util::events::Event;
 
 // Sensei modules
 use senseicore::services::admin::{AdminRequest, AdminResponse, AdminService};
@@ -29,11 +32,11 @@ use entity::node;
  * This struct processes simulation events and controls the sensei nodes.
  * It listens for the simulation events and then makes calls to the sensei AdminService and LightningNodes
  */
-#[derive(Clone)]
 pub struct SenseiController {
     sensei_admin_service: Arc<AdminService>,
     sensei_runtime_handle: tokio::runtime::Handle,
-    channel_id_map: HashMap<u64, String>
+    channel_id_map: HashMap<u64, String>,
+    rev_channel_id_map: HashMap<String, u64>
 }
 
 impl SenseiController {
@@ -42,7 +45,8 @@ impl SenseiController {
         let controller = SenseiController {
             sensei_admin_service: admin,
             sensei_runtime_handle: runtime_handle,
-            channel_id_map: HashMap::new()
+            channel_id_map: HashMap::new(),
+            rev_channel_id_map: HashMap::new()
         };
 
         controller
@@ -52,6 +56,7 @@ impl SenseiController {
     pub fn process_events(&self, mut event_channel: broadcast::Receiver<SimEvent>, output_channel: broadcast::Sender<SimResultsEvent>) {
         // This is the current map of simulation channel ids to sensei channel ids. It is needed to keep track of channels in order to open and close them.
         let mut channel_id_map: HashMap<u64, String> = self.channel_id_map.clone();
+        let mut rev_channel_id_map: HashMap<String, u64> = self.rev_channel_id_map.clone();
 
         // This is the main thread for processing sim events
         tokio::task::block_in_place(move || {
@@ -73,7 +78,7 @@ impl SenseiController {
                                 }
                             }
 
-                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: None};
+                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                         },
                         SimulationEvent::StartNodeEvent(name) => {
@@ -89,7 +94,7 @@ impl SenseiController {
                                 }
                             }
 
-                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: None};
+                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                         },
                         SimulationEvent::CloseChannelEvent(channel) => {
@@ -113,56 +118,77 @@ impl SenseiController {
                                 }
                             }
 
-                            let status_src = self.get_node_status(&channel.src_node).await;
-                            let sim_even_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: status_src};
-                            output_channel.send(sim_even_src).expect("could not send the event");
-
-                            let status_dest = self.get_node_status(&channel.dest_node).await;
-                            let sim_event_dest = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: status_dest};
-                            output_channel.send(sim_event_dest).expect("could not send the event");
+                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone()};
+                            output_channel.send(sim_event).expect("could not send the event");
                         },
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("[=== SenseiController === {}] OpenChannelEvent for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
-                            let success: bool;
                             match self.open_channel(&channel.src_node, &channel.dest_node, channel.src_balance, channel.dest_balance, channel.id).await {
                                 Ok(chanid) => {
-                                    channel_id_map.insert(channel.id, chanid);
-                                    success = true;
+                                    channel_id_map.insert(channel.id, chanid.clone());
+                                    rev_channel_id_map.insert(chanid.clone(), channel.id);
+                                    let stat = self.get_node_status(&channel.src_node).await;
+                                    match stat {
+                                        Some(s) => {
+                                            let simchan = SimChannel {
+                                                id: channel.id.clone(),
+                                                short_id: match s.get_channel(channel.id) {
+                                                    Some(sc) => {
+                                                        sc.short_id
+                                                    },
+                                                    None => {None}
+                                                },
+                                                src_node: channel.src_node.clone(),
+                                                dest_node: channel.dest_node.clone(),
+                                                src_balance: channel.src_balance,
+                                                dest_balance: channel.dest_balance.clone()
+                                            };
+                                            let channel_event = SimulationEvent::OpenChannelEvent(simchan);
+                                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: true, event: channel_event.clone()};
+                                            output_channel.send(sim_event).expect("could not send the event");
+                                        },
+                                        None => {}
+                                    }
                                 },
                                 Err(e) => {
                                     println!("could not open channel: {:?}", e);
-                                    success = false;
+                                    let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: false, event: event.event.clone()};
+                                    output_channel.send(sim_event).expect("could not send the event");
                                 }
                             }
-                            let status_src = self.get_node_status(&channel.src_node).await;
-                            let sim_even_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: status_src};
-                            output_channel.send(sim_even_src).expect("could not send the event");
 
-                            let status_dest = self.get_node_status(&channel.dest_node).await;
-                            let sim_event_dest = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: status_dest};
-                            output_channel.send(sim_event_dest).expect("could not send the event");
+
                         },
                         SimulationEvent::TransactionEvent(tx) => {
                             println!("[=== SenseiController === {}] TransactionEvent for {} <-> {}", crate::get_current_time(), tx.src_node, tx.dest_node);
-                            let success: bool;
                             match self.get_invoice(&tx.dest_node, tx.amount).await {
                                 Some(i) => {
-                                    self.send_payment(&tx.src_node, i).await;
-                                    success = true;
+                                    match self.send_payment(&tx.src_node, i).await {
+                                        Ok(id) => {
+                                            let transaction = SimTransaction {
+                                                id: Some(id.clone()),
+                                                src_node: tx.src_node.clone(),
+                                                dest_node: tx.dest_node.clone(),
+                                                amount: tx.amount,
+                                                status: SimTransactionStatus::PENDING
+                                            };
+                                            let transaction_event = SimulationEvent::TransactionEvent(transaction);
+                                            let sim_event_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: true, event: transaction_event};
+                                            output_channel.send(sim_event_src).expect("could not send the event");
+                                        },
+                                        Err(e) => {
+                                            println!("could not send payment: {:?}", e);
+                                            let sim_even_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: false, event: event.event.clone()};
+                                            output_channel.send(sim_even_src).expect("could not send the event");
+                                        }
+                                    }
                                 },
                                 None => {
-                                    println!("Could not get invoice");
-                                    success = false;
+                                    println!("could not get invoice");
+                                    let sim_even_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: false, event: event.event.clone()};
+                                    output_channel.send(sim_even_src).expect("could not send the event");
                                 }
                             }
-
-                            let status_src = self.get_node_status(&tx.src_node).await;
-                            let sim_even_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: status_src};
-                            output_channel.send(sim_even_src).expect("could not send the event");
-
-                            let status_dest = self.get_node_status(&tx.dest_node).await;
-                            let sim_event_dest = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone(), status: status_dest};
-                            output_channel.send(sim_event_dest).expect("could not send the event");
                         },
                         SimulationEvent::SimulationEndedEvent => {
                             println!("[=== SenseiController === {}] SimulationEndedEvent", crate::get_current_time());
@@ -171,10 +197,14 @@ impl SenseiController {
                                 Ok(_) => {},
                                 Err(e) => println!("could not stop sensei admin service: {:?}", e)
                             }
-                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: true, event: event.event.clone(), status: None};
+
+                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: true, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                             running = false;
                         },
+                        _ => {
+                            //other event
+                        }
                     }
                 }
             })
@@ -186,8 +216,9 @@ impl SenseiController {
      * TODO: This function is slow because creating sensei nodes is slow
      * - needs to be re-worked to speed up if the simulation framework is going to allow for large networks
      */
-    pub async fn initialize_network(&mut self, nodes: &HashMap<String, SimNode>, channels: &Vec<SimChannel>, num_nodes: u64, nigiri: bool) {
+    pub async fn initialize_network(&mut self, nodes: &HashMap<String, SimNode>, channels: &Vec<SimChannel>, num_nodes: u64, nigiri: bool) -> Vec<broadcast::Receiver<Event>> {
         println!("[=== SenseiController === {}] Creating simulation nodes", crate::get_current_time());
+        let mut sim_receivers = Vec::new();
         let num = num_nodes + 1;
         for number in 1..num {
             let node_name = String::from("simnode")+&number.to_string();
@@ -202,10 +233,10 @@ impl SenseiController {
             match self.sensei_admin_service.call(create_node_req).await {
                 Ok(response) => match response {
                     AdminResponse::CreateNode { .. } => {
-                        // TODO: fund the simulation node with the configured amount. 1 BTC is a place holder for now.
-                        if nigiri {
-                            match self.get_sensei_node(&node_name).await {
-                                Ok(node) => {
+                        match self.get_sensei_node(&node_name).await {
+                            Ok(node) => {
+                                // TODO: fund the simulation node with the configured amount. 1 BTC is a place holder for now.
+                                if nigiri {
                                     let node_req = NodeRequest::GetUnusedAddress {};
                                     match node.call(node_req).await {
                                         Ok(r) => {
@@ -218,10 +249,12 @@ impl SenseiController {
                                         }
                                         Err(e) => println!("error getting unused address: {:?}", e),
                                     }
-                                },
-                                Err(e) => {
-                                    println!("node not found: {}", e);
                                 }
+                                let r = node.sim_sender.subscribe();
+                                sim_receivers.push(r);
+                            },
+                            Err(e) => {
+                                println!("node not found: {}", e);
                             }
                         }
                     },
@@ -247,9 +280,9 @@ impl SenseiController {
                     AdminResponse::CreateNode {
                         ..
                     } => {
-                        if n.1.initial_balance != 0 && nigiri {
-                            match self.get_sensei_node(&n.0).await {
-                                Ok(node) => {
+                        match self.get_sensei_node(&n.0).await {
+                            Ok(node) => {
+                                if n.1.initial_balance != 0 && nigiri {
                                     let node_req = NodeRequest::GetUnusedAddress {};
                                     match node.call(node_req).await {
                                         Ok(r) => {
@@ -262,10 +295,12 @@ impl SenseiController {
                                         }
                                         Err(e) => println!("error getting unused address: {:?}", e),
                                     }
-                                },
-                                Err(e) => {
-                                    println!("node not found: {}", e);
                                 }
+                                let r = node.sim_sender.subscribe();
+                                sim_receivers.push(r);
+                            },
+                            Err(e) => {
+                                println!("node not found: {}", e);
                             }
                         }
                     },
@@ -283,7 +318,8 @@ impl SenseiController {
         for c in channels {
             match self.open_channel(&c.src_node, &c.dest_node, c.src_balance, c.dest_balance, c.id).await {
                 Ok(chanid) => {
-                    self.channel_id_map.insert(c.id, chanid);
+                    self.channel_id_map.insert(c.id, chanid.clone());
+                    self.rev_channel_id_map.insert(chanid.clone(), c.id);
                 },
                 Err(e) => {
                     println!("failed to open channel: {:?}", e);
@@ -292,7 +328,7 @@ impl SenseiController {
         }
 
         // The sensei chain manager updates once a second. We need to wait and make sure all commitment txs are seen by the chain manager.
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
             
         // Stop the nodes that are not marked running at the start of the simulation
         println!("[=== SenseiController === {}] Setting the initial state of each node", crate::get_current_time());
@@ -306,6 +342,8 @@ impl SenseiController {
                 }
             }
         }
+
+        sim_receivers
     }
 
     // Get a nodes total balance and channels by name
@@ -314,6 +352,8 @@ impl SenseiController {
 
         match self.get_sensei_node(name).await {
             Ok(node) => {
+                status.pub_key = node.get_pubkey();
+
                 // BALANCE
                 let balance_req = NodeRequest::GetBalance {};
                 let balance_resp = node.call(balance_req).await.unwrap();
@@ -334,30 +374,29 @@ impl SenseiController {
                 status.balance.offchain = channel;
 
                 // CHANNELS
-                // TODO: make this has_more loop work
-                //let mut has_more = true;
-                //while has_more {
-
+                let mut has_more = true;
+                let mut page_num = 0;
+                while has_more {
                     let request = PaginationRequest {
-                        page: 0,
+                        page: page_num.clone(),
                         take: 5,
                         query: None,
                     };
                     match node.list_channels(request) {
-                        Ok((c, _r)) => {
+                        Ok((c, r)) => {
                             for chan in c.into_iter() {
-                                status.channels.push(SimNodeChannel::new(chan.confirmations_required.unwrap(), chan.is_usable, chan.is_public, 
+                                status.channels.push(SimNodeChannel::new(self.rev_channel_id_map.get(&chan.channel_id).unwrap().clone(), chan.short_channel_id,  chan.confirmations_required.unwrap(), chan.is_usable, chan.is_public, 
                                     chan.is_outbound, chan.balance_msat, chan.outbound_capacity_msat, chan.inbound_capacity_msat, chan.is_channel_ready));
-                                //has_more = r.has_more;
                             }
+                            has_more = r.has_more;
                         },
                         Err(e) => {
                             println!("could not get channels: {:?}", e);
                             return None;
                         }
                     }
-
-                //}
+                    page_num = page_num + 1;
+                }
 
                 Some(status)
             },
@@ -567,20 +606,26 @@ impl SenseiController {
     }
 
     // Pay an invoice from a node
-    async fn send_payment(&self, node_name: &String, invoice: String) {
+    async fn send_payment(&self, node_name: &String, invoice: String) -> Result<String, Error> {
         match self.get_sensei_node(node_name).await {
             Ok(node) => {
                 let payment_req = NodeRequest::SendPayment {
                     invoice: invoice
                 };
                 match node.call(payment_req).await {
-                    Ok(NodeResponse::SendPayment {}) => {},
-                    Err(NodeRequestError::Sensei(e)) => println!("Could not send payment. {}", e),
-                    _ => println!("unexpected response from send payment")
+                    Ok(NodeResponse::SendPayment {id}) => {
+                        return Ok(id);
+                    },
+                    Err(NodeRequestError::Sensei(e)) => {
+                        return Err(Error::Generic(e));
+                    },
+                    _ => {
+                        return Err(Error::Generic(String::from("unexpected response from send payment")));
+                    }
                 }
             },
             Err(e) => {
-                println!("node not found: {}", e);
+                return Err(Error::Generic(String::from(e)));
             }
         }
     }

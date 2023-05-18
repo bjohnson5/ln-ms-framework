@@ -1,5 +1,6 @@
 #[derive(Clone, Debug)]
 pub struct SimNodeStatus {
+    pub pub_key: String,
     pub balance: SimNodeBalance,
     pub channels: Vec<SimNodeChannel>
 }
@@ -7,11 +8,22 @@ pub struct SimNodeStatus {
 impl SimNodeStatus {
     pub fn new() -> Self {
         let status = SimNodeStatus {
+            pub_key: String::from(""),
             balance: SimNodeBalance::new(),
             channels: Vec::new()
         };
 
         status
+    }
+
+    pub fn get_channel(&self, id: u64) -> Option<SimNodeChannel> {
+        for c in &self.channels {
+            if c.id == id {
+                return Some(c.clone());
+            }
+        }
+
+        return None;
     }
 }
 
@@ -36,6 +48,8 @@ impl SimNodeBalance {
 
 #[derive(Clone, Debug)]
 pub struct SimNodeChannel {
+    pub id: u64,
+    pub short_id: Option<u64>,
     pub confirmations_required: u32,
     pub is_usable: bool,
     pub is_public: bool,
@@ -47,8 +61,10 @@ pub struct SimNodeChannel {
 }
 
 impl SimNodeChannel {
-    pub fn new(conf_req: u32, usable: bool, public: bool, outbound: bool, bal: u64, out_bal: u64, in_bal: u64, ready: bool) -> Self {
+    pub fn new(id: u64, short_id: Option<u64>, conf_req: u32, usable: bool, public: bool, outbound: bool, bal: u64, out_bal: u64, in_bal: u64, ready: bool) -> Self {
         let channel = SimNodeChannel {
+            id: id,
+            short_id: short_id,
             confirmations_required: conf_req,
             is_usable: usable,
             is_public: public,

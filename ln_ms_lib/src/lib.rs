@@ -11,6 +11,7 @@ mod nigiri_controller;
 mod network_analyzer;
 mod sim_node_status;
 mod sim_results;
+mod ln_event_processor;
 
 use sim_node::SimNode;
 use sim_event_manager::SimEventManager;
@@ -25,6 +26,8 @@ use sim_utils::cleanup_sensei;
 use sensei_controller::SenseiController;
 use network_analyzer::NetworkAnalyzer;
 use sim_results::SimResults;
+use sim_transaction::SimTransactionStatus;
+use ln_event_processor::LnEventProcessor;
 
 // Standard Modules
 use std::collections::HashMap;
@@ -32,6 +35,7 @@ use std::time::Duration;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::thread;
+use std::sync::Mutex;
 
 // External Modules
 use anyhow::Result;
@@ -113,6 +117,14 @@ impl LnSimulation {
             .enable_all()
             .build()?;
         let analyzer_runtime_handle = analyzer_runtime.handle().clone();
+
+        // Setup the network analyzer main runtime
+        let ln_event_runtime = Builder::new_multi_thread()
+            .worker_threads(20)
+            .thread_name("ln event")
+            .enable_all()
+            .build()?;
+        let ln_event_runtime_handle = ln_event_runtime.handle().clone();
 
         // Setup the sensei database runtime
         let sensei_db_runtime = Builder::new_multi_thread()
@@ -216,6 +228,9 @@ impl LnSimulation {
             // Create the network analyzer
             let mut network_analyzer = NetworkAnalyzer::new(analyzer_runtime_handle);
 
+            // Create the ln event processor
+            let ln_event_proc = LnEventProcessor::new(ln_event_runtime_handle);
+
             // Create the sensei controller
             let mut sensei_controller = SenseiController::new(sensei_admin_service, sensei_runtime_handle);
 
@@ -233,7 +248,7 @@ impl LnSimulation {
              * - how do we model a realistic LN liquidity distribution?
              */
             println!("[=== LnSimulation === {}] Initializing simulation network", get_current_time());
-            sensei_controller.initialize_network(&self.user_nodes, &self.user_channels, self.num_sim_nodes, nigiri).await;
+            let sim_receivers = sensei_controller.initialize_network(&self.user_nodes, &self.user_channels, self.num_sim_nodes, nigiri).await;
 
             // Set up the initial runtime network graph
             println!("[=== LnSimulation === {}] Initializing the runtime network graph", get_current_time());
@@ -247,15 +262,24 @@ impl LnSimulation {
             let (sim_event_sender, _): (broadcast::Sender<SimEvent>, broadcast::Receiver<SimEvent>) = broadcast::channel(1024);
             let sensei_event_receiver = sim_event_sender.subscribe();
             let ln_simulation_receiver = sim_event_sender.subscribe();
+            let ln_event_sim_receiver = sim_event_sender.subscribe();
             let (sim_results_event_sender, _): (broadcast::Sender<SimResultsEvent>, broadcast::Receiver<SimResultsEvent>) = broadcast::channel(1024);
+            let ln_results_event_sender = sim_results_event_sender.clone();
             let network_analyzer_receiver = sim_results_event_sender.subscribe();
 
             thread::scope(|s| {
                 // Start the NetworkAnalyzer
                 println!("[=== LnSimulation === {}] Starting the network analyzer", get_current_time());
-                let network_analyzer_arc = Arc::new(&network_analyzer);
+                let network_analyzer_arc = Arc::new(Mutex::new(&mut network_analyzer));
                 let network_analyzer_handle = s.spawn(move || {
-                    network_analyzer_arc.process_events(network_analyzer_receiver);
+                    network_analyzer_arc.lock().unwrap().process_events(network_analyzer_receiver);
+                });
+
+                // Start the LnEventProcessor
+                println!("[=== LnSimulation === {}] Starting the ln event processor", get_current_time());
+                let ln_event_proc_arc = Arc::new(ln_event_proc);
+                let ln_event_proc_handle = s.spawn(move || {
+                    ln_event_proc_arc.process_events(sim_receivers, ln_results_event_sender, ln_event_sim_receiver);
                 });
 
                 // Start the SenseiController
@@ -296,6 +320,10 @@ impl LnSimulation {
                 match network_analyzer_handle.join() {
                     Ok(()) => println!("[=== LnSimulation === {}] NetworkAnalyzer stopped", get_current_time()),
                     Err(_) => println!("network analyzer could not be stopped...")
+                }
+                match ln_event_proc_handle.join() {
+                    Ok(()) => println!("[=== LnSimulation === {}] LnEventProcessor stopped", get_current_time()),
+                    Err(_) => println!("ln event processor could not be stopped...")
                 }
                 match sensei_controller_handle.join() {
                     Ok(()) => println!("[=== LnSimulation === {}] SenseiController stopped", get_current_time()),
@@ -426,7 +454,8 @@ impl LnSimulation {
             dest_node: dest,
             src_balance: amount,
             dest_balance: 0,
-            id: id
+            id: id,
+            short_id: None
         };
         self.user_channels.push(channel.clone());
 
@@ -455,7 +484,8 @@ impl LnSimulation {
             dest_node: dest, 
             src_balance: amount, 
             dest_balance: 0,
-            id: id
+            id: id,
+            short_id: None
         };
         let event = SimulationEvent::OpenChannelEvent(
             channel.clone()
@@ -475,10 +505,12 @@ impl LnSimulation {
     pub fn create_transaction_event(&mut self, src: String, dest: String, amount: u64, time: u64) {
         println!("[=== LnSimulation === {}] Add TransactionEvent for: {} at {} seconds", get_current_time(), src, time);
         let event = SimulationEvent::TransactionEvent(
-            SimTransaction{
+            SimTransaction {
+                id: None,
                 src_node: src,
                 dest_node: dest,
-                amount: amount
+                amount: amount,
+                status: SimTransactionStatus::NONE
             }
         );
         self.add_event(event, time);
@@ -626,81 +658,85 @@ mod tests {
             Ok(res) => {
                 // check results
                 let time_start = 0;
-                //let time_after_payment = 15;
-                //let time_after_stop = 28;
+                let time_after_payment = 15;
+                let time_after_stop = 28;
                 let node1 = String::from("node1");
                 let node2 = String::from("node2");
                 let node3 = String::from("node3");
                 let node4 = String::from("node4");
 
                 // balances at start of sim
-                let bal1_on = res.balance.on_chain.get(&time_start).unwrap().get(&node1).unwrap();
-                let bal1_off = res.balance.off_chain.get(&time_start).unwrap().get(&node1).unwrap();
-                assert!(bal1_on < &80000);
-                assert_eq!(bal1_off, &120000);
+                let bal1_on = res.get_on_chain_bal(time_start, &node1).unwrap();
+                let bal1_off = res.get_off_chain_bal(time_start, &node1).unwrap();
+                assert!(bal1_on < 80000);
+                assert_eq!(bal1_off, 120000);
 
-                let bal2_on = res.balance.on_chain.get(&time_start).unwrap().get(&node2).unwrap();
-                let bal2_off = res.balance.off_chain.get(&time_start).unwrap().get(&node2).unwrap();
-                assert_eq!(bal2_on, &0);
-                assert_eq!(bal2_off, &0);
+                let bal2_on = res.get_on_chain_bal(time_start, &node2).unwrap();
+                let bal2_off = res.get_off_chain_bal(time_start, &node2).unwrap();
+                assert_eq!(bal2_on, 0);
+                assert_eq!(bal2_off, 0);
                 
-                let bal3_on = res.balance.on_chain.get(&time_start).unwrap().get(&node3).unwrap();
-                let bal3_off = res.balance.off_chain.get(&time_start).unwrap().get(&node3).unwrap();
-                assert!(bal3_on < &100000);
-                assert_eq!(bal3_off, &100000);
+                let bal3_on = res.get_on_chain_bal(time_start, &node3).unwrap();
+                let bal3_off = res.get_off_chain_bal(time_start, &node3).unwrap();
+                assert!(bal3_on < 100000);
+                assert_eq!(bal3_off, 100000);
                 
-                let bal4_on = res.balance.on_chain.get(&time_start).unwrap().get(&node4).unwrap();
-                let bal4_off = res.balance.off_chain.get(&time_start).unwrap().get(&node4).unwrap();
-                assert!(bal4_on < &100000);
-                assert_eq!(bal4_off, &100000);
+                let bal4_on = res.get_on_chain_bal(time_start, &node4).unwrap();
+                let bal4_off = res.get_off_chain_bal(time_start, &node4).unwrap();
+                assert!(bal4_on < 100000);
+                assert_eq!(bal4_off, 100000);
 
-                let status1 = res.status.nodes.get(&time_start).unwrap().get(&node1).unwrap();
-                let status2 = res.status.nodes.get(&time_start).unwrap().get(&node2).unwrap();
-                let status3 = res.status.nodes.get(&time_start).unwrap().get(&node3).unwrap();
-                let status4 = res.status.nodes.get(&time_start).unwrap().get(&node4).unwrap();
+                let status1 = res.get_node_status(time_start, &node1);
+                let status2 = res.get_node_status(time_start, &node2);
+                let status3 = res.get_node_status(time_start, &node3);
+                let status4 = res.get_node_status(time_start, &node4);
 
                 // status of each node at the start of the sim
-                assert_eq!(status1, &true);
-                assert_eq!(status2, &true);
-                assert_eq!(status3, &true);
-                assert_eq!(status4, &true);
+                assert_eq!(status1, true);
+                assert_eq!(status2, true);
+                assert_eq!(status3, true);
+                assert_eq!(status4, true);
                 
                 // number open channels at start of sim
-                let num_chan = res.channels.open_channels.get(&time_start).unwrap().len();
+                let num_chan = res.get_open_channels(time_start).unwrap().len();
                 assert_eq!(num_chan, 5);
 
-                /*
                 // balances after payment
-                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node1).unwrap(), &112000);
-                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node2).unwrap(), &8000);
-                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node3).unwrap(), &100000);
-                assert_eq!(res.balance.off_chain.get(&time_after_payment).unwrap().get(&node4).unwrap(), &100000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 112000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 8000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node3).unwrap(), 100000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node4).unwrap(), 100000);
 
                 // channel balances after payment
                 let mut src_balance = 0;
                 let mut dest_balance = 0;
-                for c in res.channels.open_channels.get(&time_after_payment).unwrap() {
+                for c in res.get_open_channels(time_after_payment).unwrap() {
                     if c.id == 1 {
                         src_balance = c.src_balance;
                         dest_balance = c.dest_balance;
                         break;
                     }
                 }
-                assert_eq!(src_balance, 36000);
-                assert_eq!(dest_balance, 4000);
+                assert_eq!(src_balance, 31000);
+                assert_eq!(dest_balance, 8000);
+
+                // TODO: on chain balances after payment and closing the channel
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node1).unwrap(), ?);
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node2).unwrap(), ?);
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node3).unwrap(), ?);
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node4).unwrap(), ?);
 
                 // status of each node at the end of the sim
-                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node1).unwrap(), &false);
-                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node2).unwrap(), &false);
-                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node3).unwrap(), &false);
-                assert_eq!(res.status.nodes.get(&time_after_stop).unwrap().get(&node4).unwrap(), &false);
+                assert_eq!(res.get_node_status(time_after_stop, &node1), false);
+                assert_eq!(res.get_node_status(time_after_stop, &node2), false);
+                assert_eq!(res.get_node_status(time_after_stop, &node3), false);
+                assert_eq!(res.get_node_status(time_after_stop, &node4), false);
 
                 // number open channels at end of sim
-                assert_eq!(res.channels.open_channels.get(&time_after_stop).unwrap().len(), 0);
+                assert_eq!(res.get_open_channels(time_after_stop).unwrap().len(), 0);
 
                 // number of transactions in the sim
-                assert_eq!(res.transactions.txs.len(), 1);
-                */
+                assert_eq!(res.get_all_transactions().unwrap().len(), 1);
             },
             Err(e) => {
                 // fail the test
