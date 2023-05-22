@@ -70,11 +70,11 @@ pub struct LnSimulation {
 }
 
 impl LnSimulation {
-    // Create a new Lightning Network Simulation with the specified number of default nodes (num_sim_nodes) that will run for a specified duration (dur)
-    pub fn new(name: String, dur: u64, num_sim_nodes: u64) -> Self {
+    // Create a new Lightning Network Simulation with the specified number of default nodes (num_sim_nodes) that will run for a specified duration (duration)
+    pub fn new(name: String, duration: u64, num_sim_nodes: u64) -> Self {
         let sim = LnSimulation {
             name: name,
-            duration: dur,
+            duration: duration,
             num_sim_nodes: num_sim_nodes,
             user_events: HashMap::new(),
             user_nodes: HashMap::new(),
@@ -118,10 +118,10 @@ impl LnSimulation {
             .build()?;
         let analyzer_runtime_handle = analyzer_runtime.handle().clone();
 
-        // Setup the network analyzer main runtime
+        // Setup the ln event processor main runtime
         let ln_event_runtime = Builder::new_multi_thread()
             .worker_threads(20)
-            .thread_name("ln event")
+            .thread_name("ln_event")
             .enable_all()
             .build()?;
         let ln_event_runtime_handle = ln_event_runtime.handle().clone();
@@ -147,7 +147,7 @@ impl LnSimulation {
         // Setup the network graph main runtime
         let network_graph_runtime = Builder::new_multi_thread()
             .worker_threads(20)
-            .thread_name("network graph")
+            .thread_name("network_graph")
             .enable_all()
             .build()?;
         let network_graph_runtime_handle = network_graph_runtime.handle().clone();
@@ -190,7 +190,7 @@ impl LnSimulation {
                     config.bitcoind_rpc_port,
                     config.bitcoind_rpc_username.clone(),
                     config.bitcoind_rpc_password.clone(),
-                    tokio::runtime::Handle::current(),
+                    tokio::runtime::Handle::current(), // TODO: should this have its own runtime?
                 ) // TODO: this starts a thread that does not always get stopped, handling the error in sensei for now
                 .await
                 .expect("could not connect to to bitcoind"),
@@ -219,7 +219,7 @@ impl LnSimulation {
                     sensei_database,
                     sensei_chain_manager,
                     sensei_event_sender,
-                    tokio::runtime::Handle::current(),
+                    tokio::runtime::Handle::current(), // TODO: should this have its own runtime?
                     stop_signal.clone(),
                 )
                 .await,
@@ -254,15 +254,19 @@ impl LnSimulation {
             println!("[=== LnSimulation === {}] Initializing the runtime network graph", get_current_time());
             self.network_graph.update(&self.user_nodes, &self.user_channels, self.num_sim_nodes);
 
-            // Set up the initial results
+            // Set up the network analyzer
             println!("[=== LnSimulation === {}] Initializing the network analyzer", get_current_time());
             network_analyzer.initialize_network(&self.network_graph, &sensei_controller).await;
 
             // Create the channels for threads to communicate over
+
+            // Used for sending simulation events: Receivers will be sensei controller, runtime graph, ln event processor
             let (sim_event_sender, _): (broadcast::Sender<SimEvent>, broadcast::Receiver<SimEvent>) = broadcast::channel(1024);
             let sensei_event_receiver = sim_event_sender.subscribe();
             let ln_simulation_receiver = sim_event_sender.subscribe();
             let ln_event_sim_receiver = sim_event_sender.subscribe();
+            
+            // Used for sending results to the network analyzer: Receivers will be network analyzer
             let (sim_results_event_sender, _): (broadcast::Sender<SimResultsEvent>, broadcast::Receiver<SimResultsEvent>) = broadcast::channel(1024);
             let ln_results_event_sender = sim_results_event_sender.clone();
             let network_analyzer_receiver = sim_results_event_sender.subscribe();
@@ -296,7 +300,7 @@ impl LnSimulation {
                  */
                 println!("[=== LnSimulation === {}] Starting the transaction generator", get_current_time());
 
-                // Let the LnSimulation object wait and listen for events
+                // Start the runtime graph
                 println!("[=== LnSimulation === {}] Simulation: {} running", get_current_time(), self.name);
                 let network_graph_handle = s.spawn( || {
                     self.listen(ln_simulation_receiver, network_graph_runtime_handle);
@@ -316,7 +320,7 @@ impl LnSimulation {
                     event_manager_arc.run(d, sim_event_sender);
                 });
 
-                // Wait for all threads to finish and stop the sensei admin service
+                // Wait for all threads to finish
                 match network_analyzer_handle.join() {
                     Ok(()) => println!("[=== LnSimulation === {}] NetworkAnalyzer stopped", get_current_time()),
                     Err(_) => println!("network analyzer could not be stopped...")
@@ -339,6 +343,7 @@ impl LnSimulation {
                 }
             });
 
+            // Get the results of the simulation
             let results = network_analyzer.get_sim_results();
 
             // Clear the runtime network graph
@@ -487,10 +492,9 @@ impl LnSimulation {
             id: id,
             short_id: None
         };
-        let event = SimulationEvent::OpenChannelEvent(
-            channel.clone()
-        );
+        let event = SimulationEvent::OpenChannelEvent(channel.clone());
         self.add_event(event, time);
+        
         channel
     }
 
@@ -717,7 +721,7 @@ mod tests {
                         break;
                     }
                 }
-                assert_eq!(src_balance, 31000);
+                assert_eq!(src_balance, 31000); // TODO: why is this 31000 and not 32000?
                 assert_eq!(dest_balance, 8000);
 
                 // TODO: on chain balances after payment and closing the channel

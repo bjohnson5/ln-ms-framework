@@ -18,9 +18,9 @@ use std::time::Duration;
 
 // External modules
 use tokio::sync::broadcast;
-use lightning::util::events::Event;
 
-// Sensei modules
+// Sensei and LDK modules
+use lightning::util::events::Event;
 use senseicore::services::admin::{AdminRequest, AdminResponse, AdminService};
 use senseicore::services::admin::Error;
 use senseicore::services::node::{NodeRequest, NodeResponse, OpenChannelRequest, NodeRequestError};
@@ -78,7 +78,8 @@ impl SenseiController {
                                 }
                             }
 
-                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone()};
+                            // Tell the network analyzer that this node has been stopped or failed to stop at this time
+                            let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: success, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                         },
                         SimulationEvent::StartNodeEvent(name) => {
@@ -94,7 +95,8 @@ impl SenseiController {
                                 }
                             }
 
-                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone()};
+                            // Tell the network analyzer that this node has been started or failed to start at this time
+                            let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: success, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                         },
                         SimulationEvent::CloseChannelEvent(channel) => {
@@ -118,21 +120,26 @@ impl SenseiController {
                                 }
                             }
 
-                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: success, event: event.event.clone()};
+                            // Tell the network analyzer that this channel has closed or failed to close at this time
+                            let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: success, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                         },
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("[=== SenseiController === {}] OpenChannelEvent for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             match self.open_channel(&channel.src_node, &channel.dest_node, channel.src_balance, channel.dest_balance, channel.id).await {
                                 Ok(chanid) => {
+                                    // Establish the relationship between sensei channel id and sim channel id for the new channel
                                     channel_id_map.insert(channel.id, chanid.clone());
                                     rev_channel_id_map.insert(chanid.clone(), channel.id);
-                                    let stat = self.get_node_status(&channel.src_node).await;
-                                    match stat {
-                                        Some(s) => {
+                                    
+                                    // Get the node status from sensei and set the short id that was assigned to this channel
+                                    let node_status = self.get_node_status(&channel.src_node).await;
+                                    match node_status {
+                                        Some(status) => {
+                                            // Create a new SimChannel with the same values as the "channel" variable and the short id of the "SimNodeChannel" that we got from sensei
                                             let simchan = SimChannel {
                                                 id: channel.id.clone(),
-                                                short_id: match s.get_channel(channel.id) {
+                                                short_id: match status.get_channel(channel.id) {
                                                     Some(sc) => {
                                                         sc.short_id
                                                     },
@@ -143,28 +150,32 @@ impl SenseiController {
                                                 src_balance: channel.src_balance,
                                                 dest_balance: channel.dest_balance.clone()
                                             };
+
+                                            // Tell the network analyzer that this channel was opened and pass the new channel object to use
                                             let channel_event = SimulationEvent::OpenChannelEvent(simchan);
-                                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: true, event: channel_event.clone()};
+                                            let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: true, event: channel_event.clone()};
                                             output_channel.send(sim_event).expect("could not send the event");
                                         },
-                                        None => {}
+                                        None => { println!("node status not found, not updating the network analyzer.") }
                                     }
                                 },
                                 Err(e) => {
                                     println!("could not open channel: {:?}", e);
-                                    let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: false, event: event.event.clone()};
+                                    
+                                    // Tell the network analyzer that this channel failed to open
+                                    let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: false, event: event.event.clone()};
                                     output_channel.send(sim_event).expect("could not send the event");
                                 }
                             }
-
-
                         },
                         SimulationEvent::TransactionEvent(tx) => {
                             println!("[=== SenseiController === {}] TransactionEvent for {} <-> {}", crate::get_current_time(), tx.src_node, tx.dest_node);
                             match self.get_invoice(&tx.dest_node, tx.amount).await {
                                 Some(i) => {
+                                    // Attempt to send a payment
                                     match self.send_payment(&tx.src_node, i).await {
                                         Ok(id) => {
+                                            // Payment was sent and now we can set the payment id of this SimTransaction
                                             let transaction = SimTransaction {
                                                 id: Some(id.clone()),
                                                 src_node: tx.src_node.clone(),
@@ -172,20 +183,26 @@ impl SenseiController {
                                                 amount: tx.amount,
                                                 status: SimTransactionStatus::PENDING
                                             };
+
+                                            // Tell the network analyzer that we sent this payment successfully (it still might fail to get received though, so it is PENDING)
                                             let transaction_event = SimulationEvent::TransactionEvent(transaction);
-                                            let sim_event_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: true, event: transaction_event};
+                                            let sim_event_src = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: true, event: transaction_event};
                                             output_channel.send(sim_event_src).expect("could not send the event");
                                         },
                                         Err(e) => {
                                             println!("could not send payment: {:?}", e);
-                                            let sim_even_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: false, event: event.event.clone()};
+                                            
+                                            // Tell the network analyzer that this transaction event failed
+                                            let sim_even_src = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: false, event: event.event.clone()};
                                             output_channel.send(sim_even_src).expect("could not send the event");
                                         }
                                     }
                                 },
                                 None => {
                                     println!("could not get invoice");
-                                    let sim_even_src = SimResultsEvent{sim_time: event.sim_time.clone(), success: false, event: event.event.clone()};
+
+                                    // Tell the network analyzer that this transaction event failed
+                                    let sim_even_src = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: false, event: event.event.clone()};
                                     output_channel.send(sim_even_src).expect("could not send the event");
                                 }
                             }
@@ -198,12 +215,13 @@ impl SenseiController {
                                 Err(e) => println!("could not stop sensei admin service: {:?}", e)
                             }
 
-                            let sim_event = SimResultsEvent{sim_time: event.sim_time.clone(), success: true, event: event.event.clone()};
+                            // Tell the network analyzer that the simulation has ended and that it should stop
+                            let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: true, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                             running = false;
                         },
                         _ => {
-                            //other event
+                            // Ignore all other events
                         }
                     }
                 }
@@ -318,6 +336,7 @@ impl SenseiController {
         for c in channels {
             match self.open_channel(&c.src_node, &c.dest_node, c.src_balance, c.dest_balance, c.id).await {
                 Ok(chanid) => {
+                    // Establish the relationship between sensei channel id and sim channel id for the new channel
                     self.channel_id_map.insert(c.id, chanid.clone());
                     self.rev_channel_id_map.insert(chanid.clone(), c.id);
                 },

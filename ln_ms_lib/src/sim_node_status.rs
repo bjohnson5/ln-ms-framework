@@ -1,3 +1,7 @@
+/*
+ * This struct represents the status of a node in the simulation as reported by sensei.
+ * These values are set by querying the sensei library and getting info on the node.
+ */
 #[derive(Clone, Debug)]
 pub struct SimNodeStatus {
     pub pub_key: String,

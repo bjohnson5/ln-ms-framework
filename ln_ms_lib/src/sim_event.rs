@@ -16,12 +16,18 @@ pub enum SimulationEvent {
     SimulationEndedEvent
 }
 
+/*
+ * The path that a successful payment took
+ */
 #[derive(Clone, Debug)]
 pub struct SimPaymentPath {
     pub payment_id: String,
     pub path: Vec<PathHop>
 }
 
+/*
+ * A node along a successful payment path
+ */
 #[derive(Clone, Debug)]
 pub struct PathHop {
     pub short_channel_id: u64,
@@ -29,15 +35,21 @@ pub struct PathHop {
     pub node_pub_key: String
 }
 
+/*
+ * An event that should take place at a given time
+ */
 #[derive(Clone, Debug)]
 pub struct SimEvent {
     pub sim_time: u64,
     pub event: SimulationEvent
 }
 
+/*
+ * An event that reports the results of a SimEvent taking place
+ */
 #[derive(Clone, Debug)]
 pub struct SimResultsEvent {
-    pub sim_time: u64,
+    pub sim_time: Option<u64>, // Set to None for events that occur in response to another event: PaymentPathSuccessful, PaymentFailedEvent, PaymentSuccessEvent
     pub success: bool,
     pub event: SimulationEvent
 }
