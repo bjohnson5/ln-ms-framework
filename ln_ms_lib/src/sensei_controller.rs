@@ -40,7 +40,6 @@ pub struct SenseiController {
 }
 
 impl SenseiController {
-    // Create a new SenseiController using the admin service and runtime handle
     pub fn new(admin: Arc<AdminService>, runtime_handle: tokio::runtime::Handle) -> Self {
         let controller = SenseiController {
             sensei_admin_service: admin,
@@ -52,7 +51,9 @@ impl SenseiController {
         controller
     }
 
-    // Receive events and make the appropriate calls to the Sensei library
+    /*
+     * Receive events and make the appropriate calls to the Sensei library
+     */
     pub fn process_events(&self, mut event_channel: broadcast::Receiver<SimEvent>, output_channel: broadcast::Sender<SimResultsEvent>) {
         // This is the current map of simulation channel ids to sensei channel ids. It is needed to keep track of channels in order to open and close them.
         let mut channel_id_map: HashMap<u64, String> = self.channel_id_map.clone();
@@ -229,8 +230,8 @@ impl SenseiController {
         });
     }
 
-    // Create and fund all the initial nodes in the network
     /*
+     * Create and fund all the initial nodes in the network
      * TODO: This function is slow because creating sensei nodes is slow
      * - needs to be re-worked to speed up if the simulation framework is going to allow for large networks
      */
@@ -365,7 +366,9 @@ impl SenseiController {
         sim_receivers
     }
 
-    // Get a nodes total balance and channels by name
+    /* 
+     * Get a nodes total balance and channels by name
+     */
     pub async fn get_node_status(&self, name: &String) -> Option<SimNodeStatus> {
         let mut status = SimNodeStatus::new();
 
@@ -426,7 +429,9 @@ impl SenseiController {
         }
     }
 
-    // Gets a sensei node from the node directory
+    /*
+     * Gets a sensei node from the node directory
+     */
     async fn get_sensei_node(&self, name: &String) -> Result<Arc<LightningNode>, &str> {
         match self.get_sensei_node_model(name).await {
             Some(model) => {
@@ -446,7 +451,9 @@ impl SenseiController {
         }
     }
 
-    // Gets a sensei node from the database by username and returns an Option (None if the node was not found in the database)
+    /*
+     * Gets a sensei node from the database by username and returns an Option (None if the node was not found in the database)
+     */
     async fn get_sensei_node_model(&self, name: &String) -> Option<node::Model> {
         let db_node = self.sensei_admin_service
         .database
@@ -463,7 +470,9 @@ impl SenseiController {
         }
     }
 
-    // Stop a sensei node
+    /*
+     * Stop a sensei node
+     */
     async fn stop_node(&self, name: &String) -> Result<(), Error> {
         match self.get_sensei_node_model(name).await {
             Some(model) => {
@@ -483,7 +492,9 @@ impl SenseiController {
         }
     }
 
-    // Start a sensei node
+    /* 
+     * Start a sensei node
+     */
     async fn start_node(&self, name: &String) -> Result<(), Error> {
         match self.get_sensei_node_model(name).await {
             Some(model) => {
@@ -504,7 +515,9 @@ impl SenseiController {
         }
     }
 
-    // Close a sensei channel
+    /*
+     * Close a sensei channel
+     */
     async fn close_channel(&self, node_name: &String, id: String) -> Result<(), NodeRequestError> {
         match self.get_sensei_node(node_name).await {
             Ok(node) => {
@@ -527,7 +540,9 @@ impl SenseiController {
         }
     }
 
-    // Open a sensei channel
+    /*
+     * Open a sensei channel
+     */
     async fn open_channel(&self, src_node_name: &String, dest_node_name: &String, src_amount: u64, dest_amount: u64, id: u64) -> Result<String, Error> {
         let dest_pubkey: String;
         let dest_connection: String;
@@ -597,7 +612,9 @@ impl SenseiController {
         }
     }
 
-    // Create and return an invoice string for a node
+    /*
+     * Create and return an invoice string for a node
+     */
     async fn get_invoice(&self, node_name: &String, amount: u64) -> Option<String> {
         match self.get_sensei_node(node_name).await {
             Ok(node) => {
@@ -624,7 +641,9 @@ impl SenseiController {
         }
     }
 
-    // Pay an invoice from a node
+    /* 
+     * Pay an invoice from a node
+     */
     async fn send_payment(&self, node_name: &String, invoice: String) -> Result<String, Error> {
         match self.get_sensei_node(node_name).await {
             Ok(node) => {

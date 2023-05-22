@@ -91,7 +91,7 @@ impl NetworkAnalyzer {
                                 // The node was successfully stopped, update the status in the results at the event sim time
                                 match self.results.status.nodes.get_mut(name) {
                                     Some(n) => {
-                                        n.insert(event.sim_time, false);
+                                        n.insert(event.sim_time.unwrap(), false);
                                     },
                                     None => {}
                                 }
@@ -108,7 +108,7 @@ impl NetworkAnalyzer {
                                 // The node was successfully started, update the status in the results at the event sim time
                                 match self.results.status.nodes.get_mut(name) {
                                     Some(n) => {
-                                        n.insert(event.sim_time, true);
+                                        n.insert(event.sim_time.unwrap(), true);
                                     },
                                     None => {}
                                 }
@@ -120,7 +120,7 @@ impl NetworkAnalyzer {
                         SimulationEvent::CloseChannelEvent(channel) => {
                             println!("[=== NetworkAnalyzer === {}] CloseChannelEvent for {}", crate::get_current_time(), channel.id);
                             if event.success {
-                                self.update_close_channel_results(event.sim_time.clone(), channel);
+                                self.update_close_channel_results(event.sim_time.unwrap().clone(), channel);
                                 // TODO: update onchain balances for the nodes on the ends of this channel
                             } else {
                                 // The channel failed to close, add the event to the list of failed events
@@ -130,7 +130,7 @@ impl NetworkAnalyzer {
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("[=== NetworkAnalyzer === {}] OpenChannelEvent for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             if event.success {
-                                self.update_open_channel_results(event.sim_time.clone(), channel);
+                                self.update_open_channel_results(event.sim_time.unwrap().clone(), channel);
                                 // TODO: update the onchain balances for the nodes on the ends of this channel
                             } else {
                                 // The channel failed to open, add the event to the list of failed events
@@ -142,7 +142,7 @@ impl NetworkAnalyzer {
                             if event.success {
                                 // The payment was sent, add it to the list of transactions (it will be updated later with the details if it is successful)
                                 let new_tx: Tx = Tx {
-                                    time: event.sim_time.clone(),
+                                    time: event.sim_time.unwrap().clone(),
                                     transaction: tx.clone()
                                 };
                                 self.results.transactions.txs.push(new_tx);
@@ -157,7 +157,7 @@ impl NetworkAnalyzer {
                             // Get the time that this transaction was sent
                             let mut time_option: Option<u64> = None;
                             for transaction in &self.results.transactions.txs {
-                                match transaction.transaction.id {
+                                match &transaction.transaction.id {
                                     Some(id) => {
                                         if id == &path.payment_id {
                                             time_option = Some(transaction.time.clone());
@@ -167,7 +167,7 @@ impl NetworkAnalyzer {
                                     None => {}
                                 }
                             }
-                            let time: u64 = 0;
+                            let time: u64;
                             match time_option {
                                 Some(t) => {
                                     time = t;
@@ -187,12 +187,12 @@ impl NetworkAnalyzer {
                                     Vec::new()
                                 }
                             };
-                            self.update_open_channel_balances(time, prev_open_list, &path.path);
+                            self.update_open_channel_balances(time.clone(), prev_open_list, &path.path);
 
                             // Update the node balances along the path
                             for p in &path.path {
-                                let hop_node_name = self.pub_key_map.get(&p.node_pub_key).unwrap();
-                                self.update_off_chain_balance(time, hop_node_name, p.amount, false);
+                                let hop_node_name = self.pub_key_map.get(&p.node_pub_key).unwrap().clone();
+                                self.update_off_chain_balance(time.clone(), &hop_node_name, p.amount, false);
                             }
                         },
                         SimulationEvent::PaymentFailedEvent(id) => {
@@ -208,20 +208,20 @@ impl NetworkAnalyzer {
                             // A payment that was sent went through successfully and was received
                             // Get the transaction that this success event corresponds too and the time it was sent
                             let mut current_tx: Option<SimTransaction> = None;
-                            let mut time: Option<u64> = None;
+                            let mut time: u64 = 0;
                             for mut t in &mut self.results.transactions.txs {
                                 if &t.transaction.id.clone().unwrap() == id {
                                     // Set the status to successful
                                     t.transaction.status = SimTransactionStatus::SUCCESSFUL;
                                     current_tx = Some(t.transaction.clone());
-                                    time = Some(t.time.clone());
+                                    time = t.time.clone();
                                 }
                             };
 
                             // Update the offchain balance for the source node (sending node)
                             match current_tx {
                                 Some(t) => {
-                                    self.update_off_chain_balance(time.clone(), &t.src_node, t.amount + fee, true)
+                                    self.update_off_chain_balance(time, &t.src_node, t.amount + fee, true)
                                 },
                                 None => {
                                     println!("Transaction for this success event was not found");
@@ -301,9 +301,9 @@ impl NetworkAnalyzer {
 
                 // If this node is sending a payment subtract the amount from the previous balance, otherwise add it.
                 if sent {
-                    hm.insert(time.unwrap(), prev_bal - amount);
+                    hm.insert(time, prev_bal - amount);
                 } else {
-                    hm.insert(time.unwrap(), prev_bal + amount);
+                    hm.insert(time, prev_bal + amount);
                 }
                 
             },
@@ -326,25 +326,25 @@ impl NetworkAnalyzer {
                     // If the node for this hop is the source node of the channel then increase the src balance and decrease the dest balance
                     if hop_node_name == &prev_channel.src_node {
                         let new_chan = SimChannel {
-                            id: c.id,
-                            src_node: c.src_node.clone(),
-                            dest_node: c.dest_node.clone(),
-                            short_id: c.short_id,
-                            dest_balance: c.dest_balance - p.amount,
-                            src_balance: c.src_balance + p.amount
+                            id: prev_channel.id,
+                            src_node: prev_channel.src_node.clone(),
+                            dest_node: prev_channel.dest_node.clone(),
+                            short_id: prev_channel.short_id,
+                            dest_balance: prev_channel.dest_balance - node.amount,
+                            src_balance: prev_channel.src_balance + node.amount
                         };
                         open_list.push(new_chan);
                     }
 
                     // If the node for this hop is the destination node of the channel then increase the dest balance and decrease the src balance
-                    if hop_node_name == &c.dest_node {
+                    if hop_node_name == &prev_channel.dest_node {
                         let new_chan = SimChannel {
-                            id: c.id,
-                            src_node: c.src_node.clone(),
-                            dest_node: c.dest_node.clone(),
-                            short_id: c.short_id,
-                            dest_balance: c.dest_balance + p.amount,
-                            src_balance: c.src_balance - p.amount
+                            id: prev_channel.id,
+                            src_node: prev_channel.src_node.clone(),
+                            dest_node: prev_channel.dest_node.clone(),
+                            short_id: prev_channel.short_id,
+                            dest_balance: prev_channel.dest_balance + node.amount,
+                            src_balance: prev_channel.src_balance - node.amount
                         };
                         open_list.push(new_chan);
                     }
@@ -353,7 +353,7 @@ impl NetworkAnalyzer {
         }
 
         // Add the new list to the open channels
-        self.results.channels.open_channels.insert(t.clone(), open_list);
+        self.results.channels.open_channels.insert(time, open_list);
     }
 
     /* 

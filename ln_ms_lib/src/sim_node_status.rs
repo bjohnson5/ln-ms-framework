@@ -31,6 +31,9 @@ impl SimNodeStatus {
     }
 }
 
+/*
+ * The balance of a node as reported by sensei
+ */
 #[derive(Clone, Debug)]
 pub struct SimNodeBalance {
     pub total: u64,
@@ -50,6 +53,9 @@ impl SimNodeBalance {
     }
 }
 
+/*
+ * The information about a channel as reported by sensei
+ */
 #[derive(Clone, Debug)]
 pub struct SimNodeChannel {
     pub id: u64,

@@ -17,7 +17,6 @@ pub struct LnEventProcessor {
 }
 
 impl LnEventProcessor {
-    // Create a new LnEventProcessor
     pub fn new(runtime_handle: tokio::runtime::Handle) -> Self {
         let proc = LnEventProcessor {
             ln_event_runtime_handle: runtime_handle,
@@ -26,9 +25,11 @@ impl LnEventProcessor {
         proc
     }
 
-    // Receive ldk events and update the results. Each LDK node will have its own sender, so sim_receivers is the list of receivers that correspond to the senders
+    /*
+     * Receive ldk events and update the results. 
+     * Each LDK node will have its own sender, so sim_receivers is the list of receivers that correspond to the senders
+     */
     pub fn process_events(&self, sim_receivers: Vec<broadcast::Receiver<Event>>, sim_results_sender: broadcast::Sender<SimResultsEvent>, mut sim_event_receiver: broadcast::Receiver<SimEvent>) {
-        // This is the main thread for processing events
          tokio::task::block_in_place(move || {
             self.ln_event_runtime_handle.clone().block_on(async move {
                 // Start a thread for each of the ldk receivers and save the handles
@@ -61,14 +62,16 @@ impl LnEventProcessor {
         });
     }
 
-    // Receives events from ldk and updates the simulation results as needed
+    /*
+     * Receives events from ldk and updates the simulation results as needed
+     */
     async fn node_receive(mut rec: broadcast::Receiver<Event>, sender: broadcast::Sender<SimResultsEvent>) {
         loop {
             // Listen for events coming from the ldk nodes
             let event = match rec.recv().await {
                 Ok(e) => {e},
                 Err(_) => {
-                    // Stop the thread if the rec fails
+                    // Stop the thread if the receive fails
                     return;
                 }
             };

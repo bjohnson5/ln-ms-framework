@@ -1,7 +1,9 @@
 // External Modules
 use serde::{Serialize, Deserialize};
 
-// This struct represents a node defined in the simulation
+/*
+ * This struct represents a node defined in the simulation
+ */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimNode {
     pub name: String,

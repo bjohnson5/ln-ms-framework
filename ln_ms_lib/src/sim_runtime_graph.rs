@@ -14,7 +14,6 @@ pub struct RuntimeNetworkGraph {
 }
 
 impl RuntimeNetworkGraph {
-    // Create a new network graph
     pub fn new() -> Self {
         let network_graph = RuntimeNetworkGraph {
             nodes: Vec::new(),
@@ -24,7 +23,9 @@ impl RuntimeNetworkGraph {
         network_graph
     }
 
-    // Called during the simulation when events are seen
+    /*
+     * Called during the simulation when events are seen
+     */
     pub fn update(&mut self, nodes: &HashMap<String, SimNode>, channels: &Vec<SimChannel>, num_nodes: u64) {
         for (_,n) in nodes {
             self.nodes.push(SimNode { name: String::from(&n.name), initial_balance: n.initial_balance, running: n.running });

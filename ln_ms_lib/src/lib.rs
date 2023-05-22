@@ -70,7 +70,6 @@ pub struct LnSimulation {
 }
 
 impl LnSimulation {
-    // Create a new Lightning Network Simulation with the specified number of default nodes (num_sim_nodes) that will run for a specified duration (duration)
     pub fn new(name: String, duration: u64, num_sim_nodes: u64) -> Self {
         let sim = LnSimulation {
             name: name,
@@ -85,7 +84,9 @@ impl LnSimulation {
         sim
     }
 
-    // Run the Lightning Network Simulation
+    /*
+     * Run the Lightning Network Simulation
+     */
     pub fn run(&mut self, nigiri: bool) -> Result<SimResults> {
         println!("[=== LnSimulation === {}] Starting simulation: {} for {} seconds", get_current_time(), self.name, self.duration);
         let d = self.duration.clone();
@@ -160,7 +161,7 @@ impl LnSimulation {
             .build()?;
 
         // Initialize sensei and the simulation
-        let r = simulation_runtime.block_on(async move {
+        let sim_results = simulation_runtime.block_on(async move {
             // Start bitcoind with nigiri
             if nigiri {
                 println!("[=== LnSimulation === {}] Starting bitcoind with nigiri:", get_current_time());
@@ -363,10 +364,12 @@ impl LnSimulation {
         // Clean up sensei data after the simulation is done
         cleanup_sensei(sensei_data_dir_main);
 
-        Ok(r)
+        Ok(sim_results)
     }
 
-    // Get the current network graph for the simulation
+    /*
+     * Get the current network graph for the simulation
+     */
     pub fn get_runtime_network_graph(&self) -> String {
         let serialized_nodes = serde_json::to_string(&self.network_graph.nodes).unwrap();
         let serialized_channels = serde_json::to_string(&self.network_graph.channels).unwrap();
@@ -376,28 +379,36 @@ impl LnSimulation {
         serde_json::to_string(&map).unwrap()
     }
 
-    // Parse a file that contains a definition of a LN topology
-    // This definition could be from a project like Polar or from dumping the network information from the mainnet (lncli describegraph)
-    // The filename param is the json file of the network topology and import_map is the json file that maps nodes to a profile when importing
-    // TODO: Implement
+    /*
+     * Parse a file that contains a definition of a LN topology
+     * This definition could be from a project like Polar or from dumping the network information from the mainnet (lncli describegraph)
+     * The filename param is the json file of the network topology and import_map is the json file that maps nodes to a profile when importing
+     * TODO: Implement
+     */
     pub fn import_network(&self, filename: String, import_map: String) {
         println!("[=== LnSimulation === {}] Importing network definition from {}, with import map: {}", get_current_time(), filename, import_map);
     }
 
-    // Export the network to a json file that can be loaded later
-    // TODO: Implement
+    /*
+     * Export the network to a json file that can be loaded later
+     * TODO: Implement
+     */
     pub fn export_network(&self, filename: String) {
         println!("[=== LnSimulation === {}] Exporting network definition from {}", get_current_time(), filename);
     }
 
-    // Parse a file that contains transactions
-    // This could be from payment information from the mainnet (lncli fwdinghistory)
-    // TODO: Implement
+    /*
+     * Parse a file that contains transactions
+     * This could be from payment information from the mainnet (lncli fwdinghistory)
+     * TODO: Implement
+     */
     pub fn import_transactions(&self, filename: String) {
         println!("[=== LnSimulation === {}] Importing transactions from {}", get_current_time(), filename);
     }
 
-    // Create a node in the simulated network
+    /* 
+     * Create a node in the simulated network
+     */
     pub fn create_node(&mut self, name: String, initial_balance: u64, running: bool) {
         println!("[=== LnSimulation === {}] Create Node: {}", get_current_time(), name);
         let name_key = name.clone();
@@ -409,13 +420,17 @@ impl LnSimulation {
         self.user_nodes.insert(name_key, node);
     }
 
-    // Create a set of nodes with pre-defined properties
-    // TODO: Implement
+    /*
+     * Create a set of nodes with pre-defined properties
+     * TODO: Implement
+     */
     pub fn create_node_set(&mut self, number_of_nodes: i32, profile: String) {
         println!("[=== LnSimulation === {}] Create Node Set: {}, {}", get_current_time(), number_of_nodes, profile);
     }
 
-    // Create a channel between two nodes in the simulated network
+    /*
+     * Create a channel between two nodes in the simulated network
+     */
     pub fn create_channel(&mut self, src: String, dest: String, amount: u64, id: u64) -> Option<SimChannel> {
         println!("[=== LnSimulation === {}] Create Channel: {} -> {} for {} sats", get_current_time(), src, dest, amount);
         match self.user_nodes.get(&src) {
@@ -467,21 +482,27 @@ impl LnSimulation {
         Some(channel)
     }
 
-    // Create an event that will start up a node in the simulated network
+    /*
+     * Create an event that will start up a node in the simulated network
+     */
     pub fn create_start_node_event(&mut self, name: String, time: u64) {
         println!("[=== LnSimulation === {}] Add StartNodeEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = SimulationEvent::StartNodeEvent(name);
         self.add_event(event, time);
     }
 
-    // Create an event that will shut down a node in the simulated network
+    /*
+     * Create an event that will shut down a node in the simulated network
+     */
     pub fn create_stop_node_event(&mut self, name: String, time: u64) {
         println!("[=== LnSimulation === {}] Add StopNodeEvent for: {} at {} seconds", get_current_time(), name, time);
         let event = SimulationEvent::StopNodeEvent(name);
         self.add_event(event, time);
     }
 
-    // Create an event that will open a new channel between two nodes
+    /*
+     * Create an event that will open a new channel between two nodes
+     */
     pub fn create_open_channel_event(&mut self, src: String, dest: String, amount: u64, time: u64, id: u64) -> SimChannel {
         println!("[=== LnSimulation === {}] Add OpenChannelEvent for: {} at {} seconds", get_current_time(), src, time);
         let channel = SimChannel {
@@ -498,14 +519,18 @@ impl LnSimulation {
         channel
     }
 
-    // Create an event that will close a channel between two nodes
+    /*
+     * Create an event that will close a channel between two nodes
+     */
     pub fn create_close_channel_event(&mut self, channel: SimChannel, time: u64) {
         println!("[=== LnSimulation === {}] Add CloseChannelEvent for: {} at {} seconds", get_current_time(), channel.src_node, time);
         let event = SimulationEvent::CloseChannelEvent(channel);
         self.add_event(event, time);
     }
 
-    // Create a transaction for a given amount between two nodes
+    /*
+     * Create a transaction for a given amount between two nodes
+     */
     pub fn create_transaction_event(&mut self, src: String, dest: String, amount: u64, time: u64) {
         println!("[=== LnSimulation === {}] Add TransactionEvent for: {} at {} seconds", get_current_time(), src, time);
         let event = SimulationEvent::TransactionEvent(
@@ -520,7 +545,9 @@ impl LnSimulation {
         self.add_event(event, time);
     }
 
-    // Add a SimulationEvent to the list of events to execute
+    /*
+     * Add a SimulationEvent to the list of events to execute
+     */ 
     fn add_event(&mut self, event: SimulationEvent, time: u64) {
         if self.user_events.contains_key(&time) {
             let current_events = self.user_events.get_mut(&time).unwrap();
@@ -532,7 +559,9 @@ impl LnSimulation {
         }
     }
 
-    // Listens for simulation events and updates the runtime network graph
+    /*
+     * Listens for simulation events and updates the runtime network graph
+     */
     fn listen(&mut self, mut event_channel: broadcast::Receiver<SimEvent>, runtime_handle: tokio::runtime::Handle) {
         tokio::task::block_in_place(move || {
             runtime_handle.block_on(async move {
@@ -571,6 +600,7 @@ impl LnSimulation {
                             running = false;
                         },
                         _ => {
+                            // Ignore all other events
                         }
                     }
                 }

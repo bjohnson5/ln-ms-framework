@@ -1,7 +1,9 @@
 // External Modules
 use serde::{Serialize, Deserialize};
 
-// This struct represents a transaction in the simulation
+/*
+ * This struct represents a transaction in the simulation
+ */
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SimTransaction {
     pub id: Option<String>, // set to None until the transaction is sent by sensei and then it is assigned a value

@@ -3,11 +3,12 @@ use std::process::Command;
 
 /*
  * These functions controll the nigiri instance that is running bitcoind.
+ * TODO: Is there a better way to control the underlying bitcoin blockchain? Instead of running bash commands to control nigiri?
  */
 
-// TODO: Is there a better way to control the underlying bitcoin blockchain? Instead of running bash commands to control nigiri?
-
-// Start nigiri
+/*
+ * Start nigiri
+ */
 pub fn start() {
     Command::new("sh")
     .arg("-c")
@@ -16,7 +17,9 @@ pub fn start() {
     .expect("failed to execute start process");
 }
 
-// Stop nigiri
+/*
+ * Stop nigiri
+ */
 pub fn stop() {
     Command::new("sh")
     .arg("-c")
@@ -25,7 +28,9 @@ pub fn stop() {
     .expect("failed to execute stop process");
 }
 
-// Mine 10 blocks
+/*
+ * Mine 10 blocks
+ */
 pub fn mine() {
     Command::new("sh")
     .arg("-c")
@@ -34,7 +39,9 @@ pub fn mine() {
     .expect("failed to execute mine process");
 }
 
-// Send bitcoin to an address and mine a block
+/*
+ * Send bitcoin to an address and mine a block
+ */ 
 pub fn fund_address(addr: String, amount: u64) {
     let amount_btc = amount as f32 / 100000000.0;
     let arg = String::from("nigiri faucet ") + &addr + &String::from(" ") + &amount_btc.to_string();

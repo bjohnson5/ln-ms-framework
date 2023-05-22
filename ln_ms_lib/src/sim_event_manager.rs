@@ -26,13 +26,14 @@ impl SimEventManager {
         event_manager
     }
 
-    /* TODO: 
+    /* 
+     * Send SimulationEvent objects through the event channel at the correct simulation time
+     * TODO: 
      * - this function will need to not sleep and to have scheduled executions in its own thread
      * - for now, in order to create a proof of concept and demonstrate the project it will simply run in a loop and sleep
      * - this function is based on seconds and runs at real time, eventually it will need to be changed to a purely event based design
      *   to allow for faster-than-real-time simulation runs
      */
-    // Send SimulationEvent objects through the event channel at the correct simulation time
     pub fn run(&self, duration: u64, event_channel: broadcast::Sender<SimEvent>) {
         println!("[=== SimEventManager === {}] Running SimEventManager for {} seconds", crate::get_current_time(), duration);
         let one_sec = time::Duration::from_secs(1);

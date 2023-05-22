@@ -2,7 +2,9 @@
 use crate::sim_channel::SimChannel;
 use crate::sim_transaction::SimTransaction;
 
-// This enum represents all of the events that can be added to a simulation
+/*
+ * This enum represents all of the events that can be added to a simulation
+ */
 #[derive(Clone, Debug)]
 pub enum SimulationEvent {
     StartNodeEvent(String),
