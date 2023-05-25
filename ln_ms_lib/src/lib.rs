@@ -10,7 +10,7 @@ mod sensei_controller;
 mod nigiri_controller;
 mod network_analyzer;
 mod sim_node_status;
-mod sim_results;
+pub mod sim_results;
 mod ln_event_processor;
 
 use sim_node::SimNode;
@@ -588,7 +588,7 @@ impl LnSimulation {
                             }
                         },
                         SimulationEvent::CloseChannelEvent(channel) => {
-                            println!("[=== LnSimulation === {}]CloseChannelEvent, updating network graph", get_current_time());
+                            println!("[=== LnSimulation === {}] CloseChannelEvent, updating network graph", get_current_time());
                             self.network_graph.channels.retain(|c| c.id != channel.id);
                         },
                         SimulationEvent::OpenChannelEvent(channel) => {
@@ -596,7 +596,7 @@ impl LnSimulation {
                             self.network_graph.channels.push(channel);
                         },
                         SimulationEvent::SimulationEndedEvent => {
-                            println!("[=== LnSimulation === {}]SimulationEnded", get_current_time());
+                            println!("[=== LnSimulation === {}] SimulationEnded", get_current_time());
                             running = false;
                         },
                         _ => {
@@ -611,27 +611,309 @@ impl LnSimulation {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use serial_test::serial;
     use super::*;
 
     #[test]
-    fn it_works() {
-        /*
-         * This simulation will have 5 sim nodes and 4 user nodes.
-         * In this sim node1 is attempting to send 8000 sats to node2.
-         * TODO:    The current configuration of sensei uses the default value for max_inbound_htlc_value_in_flight_percent_of_channel when initiating a new channel or opening a channel from a request
-         *          The default max_inbound_htlc_value_in_flight_percent_of_channel is 10 meaning that each channel we open can only be used to send 10% of the total channel balance.
-         *          This can be changed in sensei to allow for larger percentages, and eventually this library will need to allow this value to be configured.
-         *          For now, we will use the default to make the github action simple (it uses the sensei github project as a dependency)
-         * In order to send the 8000 sats, node1 must open enough channels to make a multi-path payment to node2
-         * The nodes will start up, get initial funding, open channels and wait.
-         * At 10 seconds, the payment will be attempted
-         * At 20 seconds, all the channels will be closed
-         * At 25 seconds, all the nodes will be stopped
-         * At 30 seconds, the simulation will end
-         * 
-         * Then we can verify what happened in the simulation using the output from the run() function.
-         */
+    #[serial]
+    fn status_test() {
+        let mut ln_sim = LnSimulation::new(String::from("test"), 10, 0);
+        
+        ln_sim.create_node(String::from("node1"), 0, true);
 
+        ln_sim.create_stop_node_event(String::from("node1"), 2);
+        ln_sim.create_start_node_event(String::from("node1"), 6);
+        ln_sim.create_stop_node_event(String::from("node1"), 9);
+
+        let sim_results = ln_sim.run(true);
+        match sim_results {
+            Ok(res) => {
+                let node1 = String::from("node1");
+
+                let mut status1 = res.get_node_status(0, &node1);
+                assert_eq!(true, status1);
+
+                status1 = res.get_node_status(4, &node1);
+                assert_eq!(false, status1);
+
+                status1 = res.get_node_status(7, &node1);
+                assert_eq!(true, status1);
+            },
+            Err(e) => {
+                println!("Test failed due to error: {:?}", e);
+                assert_eq!(true, false);
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn channel_test() {
+        let mut ln_sim = LnSimulation::new(String::from("test"), 10, 0);
+        
+        ln_sim.create_node(String::from("node1"), 200000, true);
+        ln_sim.create_node(String::from("node2"), 0, true);
+
+        let chan1 = ln_sim.create_channel(String::from("node1"), String::from("node2"), 40000, 1);
+        match chan1 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 5);
+            },
+            None => {}
+        }
+
+        let sim_results = ln_sim.run(true);
+        match sim_results {
+            Ok(res) => {
+                let num_chan_4 = res.get_open_channels(4).unwrap().len();
+                assert_eq!(num_chan_4, 1);
+
+                let num_chan_7 = res.get_open_channels(7).unwrap().len();
+                assert_eq!(num_chan_7, 0);
+
+                let num_chan_4c = res.get_closed_channels(4);
+                assert_eq!(true, num_chan_4c.is_none());
+
+                let num_chan_7c = res.get_closed_channels(7).unwrap().len();
+                assert_eq!(num_chan_7c, 1);
+
+                for c in res.get_open_channels(3).unwrap() {
+                    assert_eq!(c.src_balance, 39000);
+                    assert_eq!(c.dest_balance, 0);
+                }
+            },
+            Err(e) => {
+                println!("Test failed due to error: {:?}", e);
+                assert_eq!(true, false);
+            }
+        }
+    }
+
+    /*
+     * TODO:    
+     * The current configuration of sensei uses the default value for max_inbound_htlc_value_in_flight_percent_of_channel when initiating a new channel or opening a channel from a request
+     * The default max_inbound_htlc_value_in_flight_percent_of_channel is 10 meaning that each channel we open can only be used to send 10% of the total channel balance.
+     * This can be changed in sensei to allow for larger percentages, and eventually this library will need to allow this value to be configured.
+     * For now, we will use the default. So each channel opened can only send 10% of its full capacity.
+     */
+    #[test]
+    #[serial]
+    fn direct_payment() {
+        let mut ln_sim = LnSimulation::new(String::from("test"), 10, 0);
+        
+        ln_sim.create_node(String::from("node1"), 200000, true);
+        ln_sim.create_node(String::from("node2"), 0, true);
+
+        let chan1 = ln_sim.create_channel(String::from("node1"), String::from("node2"), 40000, 1);
+        match chan1 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 8);
+            },
+            None => {}
+        }
+
+        ln_sim.create_transaction_event(String::from("node1"), String::from("node2"), 3000, 4);
+
+        ln_sim.create_stop_node_event(String::from("node1"), 9);
+        ln_sim.create_stop_node_event(String::from("node2"), 9);
+
+        // Start the simulation
+        let sim_results = ln_sim.run(true);
+        match sim_results {
+            Ok(res) => {
+                // check results
+                let time_start = 0;
+                let time_after_payment = 6;
+                let time_after_stop = 10;
+                let node1 = String::from("node1");
+                let node2 = String::from("node2");
+
+                // balances at start of sim
+                let bal1_on = res.get_on_chain_bal(time_start, &node1).unwrap();
+                let bal1_off = res.get_off_chain_bal(time_start, &node1).unwrap();
+                assert!(bal1_on < 160000);
+                assert_eq!(bal1_off, 40000);
+
+                let bal2_on = res.get_on_chain_bal(time_start, &node2).unwrap();
+                let bal2_off = res.get_off_chain_bal(time_start, &node2).unwrap();
+                assert_eq!(bal2_on, 0);
+                assert_eq!(bal2_off, 0);
+
+                let status1 = res.get_node_status(time_start, &node1);
+                let status2 = res.get_node_status(time_start, &node2);
+
+                // status of each node at the start of the sim
+                assert_eq!(status1, true);
+                assert_eq!(status2, true);
+                
+                // number open channels at start of sim
+                let num_chan = res.get_open_channels(time_start).unwrap().len();
+                assert_eq!(num_chan, 1);
+
+                // balances after payment
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 37000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000);
+
+                // channel balances after payment
+                let mut src_balance = 0;
+                let mut dest_balance = 0;
+                for c in res.get_open_channels(time_after_payment).unwrap() {
+                    if c.id == 1 {
+                        src_balance = c.src_balance;
+                        dest_balance = c.dest_balance;
+                        break;
+                    }
+                }
+                assert_eq!(src_balance, 36000); // TODO: why is this 31000 and not 32000?
+                assert_eq!(dest_balance, 3000);
+
+                // TODO: on chain balances after payment and closing the channel
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node1).unwrap(), ?);
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node2).unwrap(), ?);
+
+                // status of each node at the end of the sim
+                assert_eq!(res.get_node_status(time_after_stop, &node1), false);
+                assert_eq!(res.get_node_status(time_after_stop, &node2), false);
+
+                // number open channels at end of sim
+                assert_eq!(res.get_open_channels(time_after_stop).unwrap().len(), 0);
+
+                // number of transactions in the sim
+                assert_eq!(res.get_all_transactions().unwrap().len(), 1);
+            },
+            Err(e) => {
+                // fail the test
+                println!("Test failed due to error: {:?}", e);
+                assert_eq!(true, false);
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn forward_payment() {
+        let mut ln_sim = LnSimulation::new(String::from("test"), 10, 5);
+        
+        ln_sim.create_node(String::from("node1"), 200000, true);
+        ln_sim.create_node(String::from("node2"), 0, true);
+        ln_sim.create_node(String::from("node3"), 200000, true);
+
+        let chan1 = ln_sim.create_channel(String::from("node1"), String::from("node3"), 40000, 1);
+        match chan1 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 8);
+            },
+            None => {}
+        }
+
+        let chan2 = ln_sim.create_channel(String::from("node3"), String::from("node2"), 40000, 2);
+        match chan2 {
+            Some(c) => {
+                ln_sim.create_close_channel_event(c, 8);
+            },
+            None => {}
+        }
+
+        ln_sim.create_transaction_event(String::from("node1"), String::from("node2"), 3000, 4);
+
+        ln_sim.create_stop_node_event(String::from("node1"), 9);
+        ln_sim.create_stop_node_event(String::from("node2"), 9);
+        ln_sim.create_stop_node_event(String::from("node3"), 9);
+
+        // Start the simulation
+        let sim_results = ln_sim.run(true);
+        match sim_results {
+            Ok(res) => {
+                // check results
+                let time_start = 0;
+                let time_after_payment = 6;
+                let time_after_stop = 10;
+                let node1 = String::from("node1");
+                let node2 = String::from("node2");
+                let node3 = String::from("node3");
+
+                // balances at start of sim
+                let bal1_on = res.get_on_chain_bal(time_start, &node1).unwrap();
+                let bal1_off = res.get_off_chain_bal(time_start, &node1).unwrap();
+                assert!(bal1_on < 160000);
+                assert_eq!(bal1_off, 40000);
+
+                let bal2_on = res.get_on_chain_bal(time_start, &node2).unwrap();
+                let bal2_off = res.get_off_chain_bal(time_start, &node2).unwrap();
+                assert_eq!(bal2_on, 0);
+                assert_eq!(bal2_off, 0);
+                
+                let bal3_on = res.get_on_chain_bal(time_start, &node3).unwrap();
+                let bal3_off = res.get_off_chain_bal(time_start, &node3).unwrap();
+                assert!(bal3_on < 160000);
+                assert_eq!(bal3_off, 40000);
+                
+                let status1 = res.get_node_status(time_start, &node1);
+                let status2 = res.get_node_status(time_start, &node2);
+                let status3 = res.get_node_status(time_start, &node3);
+
+                // status of each node at the start of the sim
+                assert_eq!(status1, true);
+                assert_eq!(status2, true);
+                assert_eq!(status3, true);
+                
+                // number open channels at start of sim
+                let num_chan = res.get_open_channels(time_start).unwrap().len();
+                assert_eq!(num_chan, 2);
+
+                // balances after payment
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 36999); // 3000 sent for the payment plus 1 sat for a fee
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node3).unwrap(), 40001); // gains 1 sat for forwarding the payment on behalf of node1
+
+                // channel balances after payment
+                let mut src_balance1 = 0;
+                let mut dest_balance1 = 0;
+                let mut src_balance2 = 0;
+                let mut dest_balance2 = 0;
+                for c in res.get_open_channels(time_after_payment).unwrap() {
+                    if c.id == 1 {
+                        src_balance1 = c.src_balance;
+                        dest_balance1 = c.dest_balance;
+                    } else if c.id == 2 {
+                        src_balance2 = c.src_balance;
+                        dest_balance2 = c.dest_balance;
+                    }
+                }
+                assert_eq!(src_balance1, 35999); // TODO: why is this 35999 and not 36999?
+                assert_eq!(dest_balance1, 3001);
+
+                assert_eq!(src_balance2, 36000); // TODO: why is this 36000 and not 37000?
+                assert_eq!(dest_balance2, 3000);
+
+                // TODO: on chain balances after payment and closing the channel
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node1).unwrap(), ?);
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node2).unwrap(), ?);
+                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node3).unwrap(), ?);
+
+                // status of each node at the end of the sim
+                assert_eq!(res.get_node_status(time_after_stop, &node1), false);
+                assert_eq!(res.get_node_status(time_after_stop, &node2), false);
+                assert_eq!(res.get_node_status(time_after_stop, &node3), false);
+
+                // number open channels at end of sim
+                assert_eq!(res.get_open_channels(time_after_stop).unwrap().len(), 0);
+
+                // number of transactions in the sim
+                assert_eq!(res.get_all_transactions().unwrap().len(), 1);
+            },
+            Err(e) => {
+                // fail the test
+                println!("Test failed due to error: {:?}", e);
+                assert_eq!(true, false);
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn multiple_path_payment() {
         let mut ln_sim = LnSimulation::new(String::from("test"), 30, 5);
         
         ln_sim.create_node(String::from("node1"), 200000, true);
@@ -663,7 +945,7 @@ mod tests {
             None => {}
         }
 
-        let chan4 = ln_sim.create_channel(String::from("node4"), String::from("node2"), 100000, 4);
+        let chan4 = ln_sim.create_channel(String::from("node4"), String::from("node2"), 40000, 4);
         match chan4 {
             Some(c) => {
                 ln_sim.create_close_channel_event(c, 20);
@@ -671,7 +953,7 @@ mod tests {
             None => {}
         }
 
-        let chan5 = ln_sim.create_channel(String::from("node3"), String::from("node2"), 100000, 5);
+        let chan5 = ln_sim.create_channel(String::from("node3"), String::from("node2"), 40000, 5);
         match chan5 {
             Some(c) => {
                 ln_sim.create_close_channel_event(c, 20);
@@ -679,7 +961,7 @@ mod tests {
             None => {}
         }
 
-        ln_sim.create_transaction_event(String::from("node1"), String::from("node2"), 8000, 10);
+        ln_sim.create_transaction_event(String::from("node1"), String::from("node2"), 9000, 10);
 
         ln_sim.create_stop_node_event(String::from("node1"), 25);
         ln_sim.create_stop_node_event(String::from("node2"), 25);
@@ -712,13 +994,13 @@ mod tests {
                 
                 let bal3_on = res.get_on_chain_bal(time_start, &node3).unwrap();
                 let bal3_off = res.get_off_chain_bal(time_start, &node3).unwrap();
-                assert!(bal3_on < 100000);
-                assert_eq!(bal3_off, 100000);
+                assert!(bal3_on < 160000);
+                assert_eq!(bal3_off, 40000);
                 
                 let bal4_on = res.get_on_chain_bal(time_start, &node4).unwrap();
                 let bal4_off = res.get_off_chain_bal(time_start, &node4).unwrap();
-                assert!(bal4_on < 100000);
-                assert_eq!(bal4_off, 100000);
+                assert!(bal4_on < 160000);
+                assert_eq!(bal4_off, 40000);
 
                 let status1 = res.get_node_status(time_start, &node1);
                 let status2 = res.get_node_status(time_start, &node2);
@@ -736,23 +1018,54 @@ mod tests {
                 assert_eq!(num_chan, 5);
 
                 // balances after payment
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 112000);
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 8000);
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node3).unwrap(), 100000);
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node4).unwrap(), 100000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 110998); // 120k - 9k - 2 sats in fees
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 9000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node3).unwrap(), 40001); // original plus 1 sat in fees
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node4).unwrap(), 40001); // original plus 1 sat in fees
 
                 // channel balances after payment
-                let mut src_balance = 0;
-                let mut dest_balance = 0;
+                let mut src_balance1 = 0;
+                let mut dest_balance1 = 0;
+                let mut src_balance2 = 0;
+                let mut dest_balance2 = 0;
+                let mut src_balance3 = 0;
+                let mut dest_balance3 = 0;
+                let mut src_balance4 = 0;
+                let mut dest_balance4 = 0;
+                let mut src_balance5 = 0;
+                let mut dest_balance5 = 0;
                 for c in res.get_open_channels(time_after_payment).unwrap() {
                     if c.id == 1 {
-                        src_balance = c.src_balance;
-                        dest_balance = c.dest_balance;
-                        break;
+                        src_balance1 = c.src_balance;
+                        dest_balance1 = c.dest_balance;
+                    }
+                    if c.id == 2 {
+                        src_balance2 = c.src_balance;
+                        dest_balance2 = c.dest_balance;
+                    }
+                    if c.id == 3 {
+                        src_balance3 = c.src_balance;
+                        dest_balance3 = c.dest_balance;
+                    }
+                    if c.id == 4 {
+                        src_balance4 = c.src_balance;
+                        dest_balance4 = c.dest_balance;
+                    }
+                    if c.id == 5 {
+                        src_balance5 = c.src_balance;
+                        dest_balance5 = c.dest_balance;
                     }
                 }
-                assert_eq!(src_balance, 31000); // TODO: why is this 31000 and not 32000?
-                assert_eq!(dest_balance, 8000);
+                assert_eq!(src_balance1, 39000 - 4000);
+                assert_eq!(dest_balance1, 4000);
+                assert!(src_balance2 == (39000 - 2003) || src_balance2 == (39000 - 2999));
+                assert!(dest_balance2 == 2003 || dest_balance2 == 2999);
+                assert!(src_balance3 == (39000 - 2999) || src_balance3 == (39000 - 2003));
+                assert!(dest_balance3 == 2999 || dest_balance3 == 2003);
+                assert!(src_balance4 == (39000 - 2998) || src_balance4 == (39000 - 2002));
+                assert!(dest_balance4 == 2998 || dest_balance4 == 2002);
+                assert!(src_balance5 == (39000 - 2002) || src_balance5 == (39000 - 2998));
+                assert!(dest_balance5 == 2002 || dest_balance5 == 2998);
 
                 // TODO: on chain balances after payment and closing the channel
                 //assert_eq!(res.get_on_chain_bal(time_after_stop, &node1).unwrap(), ?);
@@ -771,6 +1084,10 @@ mod tests {
 
                 // number of transactions in the sim
                 assert_eq!(res.get_all_transactions().unwrap().len(), 1);
+
+                // save the results webpage
+                //let html = res.get_results_page();
+                //fs::write(String::from("/home/blake/output.html"), html).expect("Unable to write file");
             },
             Err(e) => {
                 // fail the test

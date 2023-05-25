@@ -41,6 +41,7 @@ impl NetworkAnalyzer {
      */
     pub async fn initialize_network(&mut self, network: &RuntimeNetworkGraph, sensei_controller: &SenseiController) {
         self.results.channels.open_channels.insert(0, Vec::new());
+        self.results.event_times.push(0);
 
         // Initialize balances and status
         for n in &network.nodes {
@@ -83,6 +84,9 @@ impl NetworkAnalyzer {
                 let mut running = true;
                 while running {
                     let event = results_channel.recv().await.unwrap();
+                    if event.sim_time.is_some() && !self.results.event_times.contains(&event.sim_time.unwrap()){
+                        self.results.event_times.push(event.sim_time.unwrap());
+                    }
                     // Match on the SimulationEvent
                     match &event.event {
                         SimulationEvent::StopNodeEvent(name) => {
@@ -156,6 +160,7 @@ impl NetworkAnalyzer {
                             // Update the channel and node balances at the time of this payment
                             // Get the time that this transaction was sent
                             let mut time_option: Option<u64> = None;
+                            let payment_amount: u64 = path.path.last().unwrap().amount;
                             for transaction in &self.results.transactions.txs {
                                 match &transaction.transaction.id {
                                     Some(id) => {
@@ -167,6 +172,7 @@ impl NetworkAnalyzer {
                                     None => {}
                                 }
                             }
+
                             let time: u64;
                             match time_option {
                                 Some(t) => {
@@ -187,7 +193,7 @@ impl NetworkAnalyzer {
                                     Vec::new()
                                 }
                             };
-                            self.update_open_channel_balances(time.clone(), prev_open_list, &path.path);
+                            self.update_open_channel_balances(time.clone(), prev_open_list, &path.path, payment_amount);
 
                             // Update the node balances along the path
                             for p in &path.path {
@@ -316,11 +322,19 @@ impl NetworkAnalyzer {
     /*
      * Update the channel balances along a payment path
      */
-    fn update_open_channel_balances(&mut self, time: u64, previous_list: Vec<SimChannel>, path: &Vec<PathHop>) {
+    fn update_open_channel_balances(&mut self, time: u64, previous_list: Vec<SimChannel>, path: &Vec<PathHop>, payment_amount: u64) {
         let mut open_list: Vec<SimChannel> = Vec::new();
+        let mut updated: bool;
         // Loop through the previous list of open channels and find the channel that is being used
         for prev_channel in previous_list {
+            updated = false;
             for node in path {
+                let amount: u64;
+                if payment_amount == node.amount {
+                    amount = payment_amount;
+                } else {
+                    amount = payment_amount + node.amount;
+                }
                 let hop_node_name = self.pub_key_map.get(&node.node_pub_key).unwrap();
                 if prev_channel.short_id.is_some() && &prev_channel.short_id.unwrap() == &node.short_channel_id {
                     // If the node for this hop is the source node of the channel then increase the src balance and decrease the dest balance
@@ -330,10 +344,11 @@ impl NetworkAnalyzer {
                             src_node: prev_channel.src_node.clone(),
                             dest_node: prev_channel.dest_node.clone(),
                             short_id: prev_channel.short_id,
-                            dest_balance: prev_channel.dest_balance - node.amount,
-                            src_balance: prev_channel.src_balance + node.amount
+                            dest_balance: prev_channel.dest_balance - amount,
+                            src_balance: prev_channel.src_balance + amount
                         };
                         open_list.push(new_chan);
+                        updated = true;
                     }
 
                     // If the node for this hop is the destination node of the channel then increase the dest balance and decrease the src balance
@@ -343,12 +358,17 @@ impl NetworkAnalyzer {
                             src_node: prev_channel.src_node.clone(),
                             dest_node: prev_channel.dest_node.clone(),
                             short_id: prev_channel.short_id,
-                            dest_balance: prev_channel.dest_balance + node.amount,
-                            src_balance: prev_channel.src_balance - node.amount
+                            dest_balance: prev_channel.dest_balance + amount,
+                            src_balance: prev_channel.src_balance - amount
                         };
                         open_list.push(new_chan);
+                        updated = true;
                     }
                 }
+            }
+
+            if !updated {
+                open_list.push(prev_channel.clone());
             }
         }
 

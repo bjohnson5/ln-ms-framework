@@ -80,7 +80,7 @@ impl LnEventProcessor {
                     match pay_id {
                         Some(id) => {
                             // This payment was successful, send the sim event to the network analyzer with the payment_id and amount
-                            let fee_paid = if fee.is_some() {fee.unwrap()} else {0};
+                            let fee_paid = if fee.is_some() { fee.unwrap() / 1000 } else {0};
                             let simevent = SimulationEvent::PaymentSuccessEvent(hex_utils::hex_str(&id.0), fee_paid);
                             let e = SimResultsEvent {
                                 sim_time: None,

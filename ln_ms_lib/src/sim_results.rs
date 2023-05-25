@@ -1,10 +1,14 @@
-// Project modules
+// Project Modules
 use crate::sim_transaction::SimTransaction;
 use crate::sim_channel::SimChannel;
 use crate::sim_event::SimResultsEvent;
 
+// External Modules
+use build_html::*;
+
 // Standard Modules
 use std::collections::HashMap;
+use std::fs;
 
 /*
  * The results of the simulation are stored in this struct and returned at the end of a run
@@ -15,7 +19,8 @@ pub struct SimResults {
     pub transactions: TxResults,
     pub channels: ChannelResults,
     pub status: StatusResults,
-    pub failed_events: Vec<SimResultsEvent>
+    pub failed_events: Vec<SimResultsEvent>,
+    pub event_times: Vec<u64>
 }
 
 impl SimResults {
@@ -25,7 +30,8 @@ impl SimResults {
             transactions: TxResults { txs: Vec::new() },
             channels: ChannelResults { open_channels: HashMap::new(), closed_channels: HashMap::new() },
             status: StatusResults { nodes: HashMap::new() },
-            failed_events: Vec::new()
+            failed_events: Vec::new(),
+            event_times: Vec::new()
         };
 
         r
@@ -130,7 +136,6 @@ impl SimResults {
                 return Some(self.channels.open_channels.get(&k).unwrap().clone());
             },
             None => {
-                // The time was not found
                 return None;
             }
         }
@@ -183,6 +188,100 @@ impl SimResults {
                 return false;
             }
         }
+    }
+
+    pub fn get_results_page(&self) -> String {
+        let mut node_list = Container::new(ContainerType::UnorderedList);
+        let mut node_details = Container::new(ContainerType::Div);
+        let mut timeline = Container::new(ContainerType::Div).with_attributes([("id", "tl"), ("class", "timeline")]);
+        let mut time_details = Container::new(ContainerType::Div);
+        
+        let mut i = 0;
+        for node_name in &self.get_nodes() {
+            i = i + 1;
+            let id = format!("node{i}");
+            let select_fn = format!("selectNode({i})");
+            node_list.add_container(
+                Container::new(ContainerType::Div)
+                .with_attributes([("id", id.as_str()), ("class", "event"), ("onclick", select_fn.as_str())])
+                .with_paragraph(node_name));
+
+            let mut l = 0;
+            for time in &self.event_times {
+                l = l + 1;
+                node_details.add_container(self.get_node_html(i, l, time, node_name));
+            }
+        }
+
+        let mut j = 0;
+        for time in &self.event_times {
+            j = j + 1;
+            let container_side;
+            if j % 2 != 0 {
+                container_side = "container left";
+            } else {
+                container_side = "container right";
+            }
+            let id = format!("item-{j}");
+            let select_fn = format!("selectItem({j})");
+            timeline.add_container(
+                Container::new(ContainerType::Div)
+                .with_attributes([("class", container_side)])
+                .with_container(Container::new(ContainerType::Div)
+                .with_attributes([("id", id.as_str()), ("class", "timeline-item"), ("onclick", select_fn.as_str())])
+                .with_paragraph(time)));
+
+            time_details.add_container(self.get_time_html(j, time));
+        }
+
+        let template = fs::read_to_string("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/results_html/index.html");
+        match template {
+            Ok(html_page) => {
+                let page1 = html_page.as_str().replace("<!--NODE_LIST-->", node_list.to_html_string().as_str());
+                let page2 = page1.as_str().replace("<!--NODE_DETAILS-->", node_details.to_html_string().as_str());
+                let page3 = page2.as_str().replace("<!--TIMELINE-->", timeline.to_html_string().as_str());
+                let html = page3.as_str().replace("<!--TIME_DETAILS-->", time_details.to_html_string().as_str());
+                html
+            },
+            Err(e) => {
+                println!("Error reading the results template file: {:?}", e);
+                String::from("")
+            }
+        }
+
+    }
+
+    pub fn get_node_html(&self, node_num: i32, time_num: i32, time: &u64, node: &String) -> Container {
+        let title_id = format!("node-title{node_num}{time_num}");
+        let desc_id = format!("node-description{node_num}{time_num}");
+        let desc = format!("description for node: {node} at time: {time}");
+        let node_details = Container::new(ContainerType::Div)
+                                        .with_attributes([("class", "details")])
+                                        .with_paragraph_attr(node, [("id", title_id.as_str())])
+                                        .with_paragraph_attr(desc.as_str(), [("id", desc_id.as_str())]);
+                                    //add node details
+        node_details
+    }
+
+    pub fn get_time_html(&self, time_num: i32, time: &u64) -> Container {
+        let title_id = format!("title{time_num}");
+        let desc_id = format!("description{time_num}");
+        let desc = format!("description for time: {time}");
+        let time_details = Container::new(ContainerType::Div)
+                                        .with_attributes([("class", "details")])
+                                        .with_paragraph_attr(time, [("id", title_id.as_str())])
+                                        .with_paragraph_attr(desc.as_str(), [("id", desc_id.as_str())]);
+                                    //add time details
+        time_details
+    }
+
+    pub fn get_nodes(&self) -> Vec<String> {
+        let mut nodes: Vec<String> = Vec::new();
+        for name in self.balance.on_chain.keys() {
+            nodes.push(name.clone());
+        }
+
+        nodes
     }
 
     /*

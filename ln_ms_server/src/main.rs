@@ -70,6 +70,7 @@ pub mod api {
     // Project Modules
     use ln_ms_lib::LnSimulation;
     use ln_ms_lib::sim_channel::SimChannel;
+    use ln_ms_lib::sim_results::SimResults;
 
     // Standard Modules
     use std::thread;
@@ -92,6 +93,7 @@ pub mod api {
      * - for simplicity it will be used as a global variable right now in order to demonstate the use case
      */
     static mut SIM: Option<LnSimulation> = None;
+    static mut RESULTS: Option<SimResults> = None;
 
     // TODO: implement
     #[utoipa::path(
@@ -291,10 +293,41 @@ pub mod api {
             // TODO: get the simulation object from a database and do not use a static global unsafe variable
             match SIM.as_mut() {
                 Some(s) => {
-                    thread::spawn(move || {s.run(run_sim_request.nigiri)});
+                    thread::spawn(move || {
+                        let res = s.run(run_sim_request.nigiri);
+                        match res {
+                            Ok(r) => {
+                                RESULTS = Some(r);
+                            },
+                            Err(_) => {}
+                        }
+                    });
                     HttpResponse::Ok().body(String::from("Running Simulation: ") + &run_sim_request.name)
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before running a simulation")
+            }
+        }
+    }
+
+    #[utoipa::path(
+        params(
+            ("sim_name", description = "The name of the simulation to get results of")
+        ),
+        responses(
+            (status = 200, description = "Successfully got results of a simulation", body = String),
+        )
+    )]
+    #[get("/get_results/{sim_name}")]
+    pub async fn get_results(_sim_name: Path<String>) -> Result<HttpResponse> {
+        unsafe {
+            match &RESULTS {
+                Some(res) => {
+                    let html = res.get_results_page();
+                    Ok(HttpResponse::Ok()
+                        .content_type("text/html; charset=utf-8")
+                        .body(html))
+                },
+                None => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body("could not get results"))
             }
         }
     }
