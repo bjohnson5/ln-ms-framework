@@ -331,7 +331,7 @@ impl SenseiController {
 
         // The sensei chain manager updates once a second. We need to wait and make sure all nodes are funded and the chain manager is aware of new blocks.
         // The chain manager needs to be up to date before trying to open channels.
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
         
         println!("[=== SenseiController === {}] Creating channels", crate::get_current_time());
         for c in channels {
@@ -346,9 +346,6 @@ impl SenseiController {
                 }
             }
         }
-
-        // The sensei chain manager updates once a second. We need to wait and make sure all commitment txs are seen by the chain manager.
-        tokio::time::sleep(Duration::from_secs(2)).await;
             
         // Stop the nodes that are not marked running at the start of the simulation
         println!("[=== SenseiController === {}] Setting the initial state of each node", crate::get_current_time());
@@ -390,15 +387,6 @@ impl SenseiController {
                     }
                     _ => (0, 0, 0)
                 };
-
-                let mut b = onchain;
-                let mut i = 0;
-                while b == 235104 && i < 100 {
-                    let balance = node.wallet.lock().unwrap().get_balance().unwrap();
-                    b = balance.get_total();
-                    println!("----------------{} {} {} {} {} ", b, balance.confirmed, balance.immature, balance.untrusted_pending, balance.trusted_pending);
-                    i = i + 1;
-                }
 
                 status.balance.total = balance;
                 status.balance.onchain = onchain;
@@ -537,8 +525,13 @@ impl SenseiController {
 
                 match node.call(close_chan).await {
                     Ok(NodeResponse::CloseChannel {}) => {
-                        //TODO: mining should be on a separate thread and continually generating new blocks. That will simulate accurate channel opening... you have to wait until the funding tx is included in a block
+                        //TODO: mining should be on a separate thread and continually generating new blocks.
+                        //      that will simulate accurate channel closing... you have to wait until the closing tx is included in a block
+                        //      this needs to be removed, makes it easier for testing purposes right now... immediatly making the closing transaction valid by mining blocks and sleeping to let the chain manager update
+                        //      in order to be more realistic, the simulation should have to wait to see the confirmed funding transaction before using the channel
+                        //      the sensei chain manager updates once a second. We need to wait and make sure all funding txs are seen by the chain manager.
                         nigiri_controller::mine();
+                        tokio::time::sleep(Duration::from_secs(2)).await;
                         Ok(())
                     },
                     Err(e) => Err(e),
@@ -598,8 +591,13 @@ impl SenseiController {
                     Ok(NodeResponse::OpenChannels {requests: _, results: r}) => {
                         match &r[0].channel_id {
                             Some(chanid) => {
-                                //TODO: mining should be on a separate thread and continually generating new blocks. That will simulate accurate channel opening... you have to wait until the funding tx is included in a block
+                                //TODO: mining should be on a separate thread and continually generating new blocks.
+                                //      that will simulate accurate channel opening... you have to wait until the funding tx is included in a block
+                                //      this needs to be removed, makes it easier for testing purposes right now... immediatly making the closing transaction valid by mining blocks and sleeping to let the chain manager update
+                                //      in order to be more realistic, the simulation should have to wait to see the confirmed funding transaction before using the channel
+                                //      the sensei chain manager updates once a second. We need to wait and make sure all funding txs are seen by the chain manager.
                                 nigiri_controller::mine();
+                                tokio::time::sleep(Duration::from_secs(2)).await;
                                 return Ok(String::from(chanid));
                             },
                             None => {

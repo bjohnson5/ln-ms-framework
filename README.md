@@ -34,8 +34,9 @@ cargo run
 ## Goals
 - Scale: Trim down the implementation in order to run large simulations with lots of nodes and channels
 - Liquidity Modeling: Allow for configuring the overall liquidity of the network
-- Configuration: Allow for more user configuration
+- Configuration: Allow for more user configuration of nodes
 - Simulated Network Traffic: Create simulated transactions that impact the traffic and liquidity of the network
+- Simulated Mining functionality: Create a thread that generates new blocks at a given interval (this could be run as real time... 10 min for a new block to allow for real time testing... or as event driven faster than real time)
 - Front end web interface to create/save/run simulations: Build a front end to the ln_ms_server API that users can use to build sims, save them to a database and load them later
 - Interoperability: Allow for different LN implementations to be added to the simulation (lnd, core lightning, etc...)
 - Real Node In The Loop: Build this simulation framework with the flexibility to allow a real node (controlled by the user) to join and interact on the simulation network
