@@ -40,6 +40,7 @@ async fn main() -> std::io::Result<()> {
 
     println!("View simulation swagger api here: http://localhost:8080/swagger-ui/index.html");
     println!("View simulated network here: http://localhost:8080/network_monitor");
+    println!("View simulation results here: http://localhost:8080/results");
 
     HttpServer::new(move || {
         App::new()
@@ -53,6 +54,7 @@ async fn main() -> std::io::Result<()> {
             .service(api::create_event)
             .service(api::run_sim)
             .service(api::import_network)
+            .service(api::results)
             .service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(vec![
                 (
                     Url::new("api", "/api-doc/openapi.json"), 
@@ -88,6 +90,21 @@ pub mod api {
             .body(include_str!("../static/network_monitor.html")))
     }
 
+    // Get the results of a simulation
+    #[get("/results")]
+    pub async fn results() -> Result<HttpResponse> {
+        unsafe {
+            match &RESULTS {
+                Some(res) => {
+                    let html = res.get_results_page();
+                    Ok(HttpResponse::Ok()
+                        .content_type("text/html; charset=utf-8")
+                        .body(html))
+                },
+                None => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body("could not get results"))
+            }
+        }
+    }
     /* 
      * TODO: this will not be a global variable, each endpoint will get the LnSimulation object from the database
      * - for simplicity it will be used as a global variable right now in order to demonstate the use case
@@ -305,29 +322,6 @@ pub mod api {
                     HttpResponse::Ok().body(String::from("Running Simulation: ") + &run_sim_request.name)
                 }
                 None => HttpResponse::NotFound().body("Simulation not found, try creating a new simulation before running a simulation")
-            }
-        }
-    }
-
-    #[utoipa::path(
-        params(
-            ("sim_name", description = "The name of the simulation to get results of")
-        ),
-        responses(
-            (status = 200, description = "Successfully got results of a simulation", body = String),
-        )
-    )]
-    #[get("/get_results/{sim_name}")]
-    pub async fn get_results(_sim_name: Path<String>) -> Result<HttpResponse> {
-        unsafe {
-            match &RESULTS {
-                Some(res) => {
-                    let html = res.get_results_page();
-                    Ok(HttpResponse::Ok()
-                        .content_type("text/html; charset=utf-8")
-                        .body(html))
-                },
-                None => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body("could not get results"))
             }
         }
     }

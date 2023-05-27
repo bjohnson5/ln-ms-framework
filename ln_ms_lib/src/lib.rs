@@ -1,6 +1,5 @@
 // Project Modules
 mod sim_node;
-pub mod sim_channel;
 mod sim_transaction;
 mod sim_event;
 mod sim_event_manager;
@@ -10,8 +9,9 @@ mod sensei_controller;
 mod nigiri_controller;
 mod network_analyzer;
 mod sim_node_status;
-pub mod sim_results;
 mod ln_event_processor;
+pub mod sim_results;
+pub mod sim_channel;
 
 use sim_node::SimNode;
 use sim_event_manager::SimEventManager;
@@ -611,7 +611,7 @@ impl LnSimulation {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    //use std::fs;
     use serial_test::serial;
     use super::*;
 
@@ -679,7 +679,7 @@ mod tests {
                 assert_eq!(num_chan_7c, 1);
 
                 for c in res.get_open_channels(3).unwrap() {
-                    assert_eq!(c.src_balance, 39000);
+                    assert_eq!(c.src_balance, 39000); // TODO: why is the channel balance 1000 less than the on chain balance and the amount the channel was opened with (39000 instead of 40000)
                     assert_eq!(c.dest_balance, 0);
                 }
             },
@@ -732,7 +732,7 @@ mod tests {
                 // balances at start of sim
                 let bal1_on = res.get_on_chain_bal(time_start, &node1).unwrap();
                 let bal1_off = res.get_off_chain_bal(time_start, &node1).unwrap();
-                assert!(bal1_on < 160000);
+                assert!(bal1_on < 160000); // 200000 - the amount of the channel - minus fees
                 assert_eq!(bal1_off, 40000);
 
                 let bal2_on = res.get_on_chain_bal(time_start, &node2).unwrap();
@@ -752,8 +752,8 @@ mod tests {
                 assert_eq!(num_chan, 1);
 
                 // balances after payment
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 37000);
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 37000); // 40000 - payment
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000); // 0 + payment
 
                 // channel balances after payment
                 let mut src_balance = 0;
@@ -765,7 +765,7 @@ mod tests {
                         break;
                     }
                 }
-                assert_eq!(src_balance, 36000); // TODO: why is this 31000 and not 32000?
+                assert_eq!(src_balance, 36000); // TODO: why is the channel balance 1000 less than the on chain balance and the amount the channel was opened with (36000 instead of 37000)
                 assert_eq!(dest_balance, 3000);
 
                 // TODO: on chain balances after payment and closing the channel
@@ -836,7 +836,7 @@ mod tests {
                 // balances at start of sim
                 let bal1_on = res.get_on_chain_bal(time_start, &node1).unwrap();
                 let bal1_off = res.get_off_chain_bal(time_start, &node1).unwrap();
-                assert!(bal1_on < 160000);
+                assert!(bal1_on < 160000); // 200000 - amount of channel - fees
                 assert_eq!(bal1_off, 40000);
 
                 let bal2_on = res.get_on_chain_bal(time_start, &node2).unwrap();
@@ -846,7 +846,7 @@ mod tests {
                 
                 let bal3_on = res.get_on_chain_bal(time_start, &node3).unwrap();
                 let bal3_off = res.get_off_chain_bal(time_start, &node3).unwrap();
-                assert!(bal3_on < 160000);
+                assert!(bal3_on < 160000); // 200000 - amount of channel - fees
                 assert_eq!(bal3_off, 40000);
                 
                 let status1 = res.get_node_status(time_start, &node1);
@@ -863,7 +863,7 @@ mod tests {
                 assert_eq!(num_chan, 2);
 
                 // balances after payment
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 36999); // 3000 sent for the payment plus 1 sat for a fee
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 36999); // 3000 sent for the payment and 1 sat for a fee
                 assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000);
                 assert_eq!(res.get_off_chain_bal(time_after_payment, &node3).unwrap(), 40001); // gains 1 sat for forwarding the payment on behalf of node1
 
@@ -881,10 +881,10 @@ mod tests {
                         dest_balance2 = c.dest_balance;
                     }
                 }
-                assert_eq!(src_balance1, 35999); // TODO: why is this 35999 and not 36999?
+                assert_eq!(src_balance1, 35999); // TODO: why is the channel balance 1000 less than the on chain balance and the amount the channel was opened with (35999 instead of 36999)
                 assert_eq!(dest_balance1, 3001);
 
-                assert_eq!(src_balance2, 36000); // TODO: why is this 36000 and not 37000?
+                assert_eq!(src_balance2, 36000); // TODO: why is the channel balance 1000 less than the on chain balance and the amount the channel was opened with (36000 instead of 37000)
                 assert_eq!(dest_balance2, 3000);
 
                 // TODO: on chain balances after payment and closing the channel

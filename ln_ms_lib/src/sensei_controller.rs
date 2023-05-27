@@ -391,6 +391,15 @@ impl SenseiController {
                     _ => (0, 0, 0)
                 };
 
+                let mut b = onchain;
+                let mut i = 0;
+                while b == 235104 && i < 100 {
+                    let balance = node.wallet.lock().unwrap().get_balance().unwrap();
+                    b = balance.get_total();
+                    println!("----------------{} {} {} {} {} ", b, balance.confirmed, balance.immature, balance.untrusted_pending, balance.trusted_pending);
+                    i = i + 1;
+                }
+
                 status.balance.total = balance;
                 status.balance.onchain = onchain;
                 status.balance.offchain = channel;

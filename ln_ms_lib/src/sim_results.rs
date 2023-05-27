@@ -190,12 +190,23 @@ impl SimResults {
         }
     }
 
+    /*
+     * Get the results of this simulation formatted in an HTML webpage
+     */
     pub fn get_results_page(&self) -> String {
+        // A list of all the nodes in the simulation
         let mut node_list = Container::new(ContainerType::UnorderedList);
+        
+        // A details section about each node
         let mut node_details = Container::new(ContainerType::Div);
+        
+        // A timeline showing the times in the simulation where an event occurred
         let mut timeline = Container::new(ContainerType::Div).with_attributes([("id", "tl"), ("class", "timeline")]);
+
+        // A details section about each time in the simulation
         let mut time_details = Container::new(ContainerType::Div);
         
+        // Create the node list and node details sections
         let mut i = 0;
         for node_name in &self.get_nodes() {
             i = i + 1;
@@ -213,6 +224,7 @@ impl SimResults {
             }
         }
 
+        // Create the timeline and time details sections
         let mut j = 0;
         for time in &self.event_times {
             j = j + 1;
@@ -234,6 +246,7 @@ impl SimResults {
             time_details.add_container(self.get_time_html(j, time));
         }
 
+        // Read in the template HTML page and replace the relevant sections with the sections created above
         let template = fs::read_to_string("/home/blake/Projects/ln-ms-framework/ln_ms_lib/src/results_html/index.html");
         match template {
             Ok(html_page) => {
@@ -251,31 +264,111 @@ impl SimResults {
 
     }
 
-    pub fn get_node_html(&self, node_num: i32, time_num: i32, time: &u64, node: &String) -> Container {
+    /*
+     * Get an html element containing a formatted string with the details of a given node at a given time
+     */
+    fn get_node_html(&self, node_num: i32, time_num: i32, time: &u64, node: &String) -> Container {
         let title_id = format!("node-title{node_num}{time_num}");
         let desc_id = format!("node-description{node_num}{time_num}");
-        let desc = format!("description for node: {node} at time: {time}");
+
+        // Get the status and balances of this node at this time in the simulation
+        let status = if self.get_node_status(time.clone(), node) {"ONLINE"} else {"OFFLINE"};
+        let onchain = match self.get_on_chain_bal(time.clone(), node) {
+            Some(b) => {b},
+            None => 0
+        };
+        let offchain = match self.get_off_chain_bal(time.clone(), node) {
+            Some(b) => {b},
+            None => 0
+        };
+
+        // Get the open channels for this node at this time in the simulation
+        let mut channels_string = String::from("");
+        match self.get_open_channels(time.clone()) {
+            Some(channels) => {
+                for c in channels {
+                    if &c.src_node == node || &c.dest_node == node {
+                        let srcbal = c.src_balance.clone();
+                        let destbal = c.dest_balance.clone();
+                        channels_string = channels_string + &c.src_node + " " + &String::from("&#8594") + " " + &c.dest_node + " (" + &format!("{srcbal}") + " " + &String::from("&#8594") + " " + &format!("{destbal}") + ")\n\t";
+                    }
+                }
+            },
+            None => {}
+        };
+        
+        // Create the container
+        let desc = format!("TIME: {time}\n\nSTATUS: {status}\n\nONCHAIN BALANCE: {onchain}\n\nLN BALANCE: {offchain}\n\nCHANNELS: \n\t{channels_string}");
         let node_details = Container::new(ContainerType::Div)
                                         .with_attributes([("class", "details")])
-                                        .with_paragraph_attr(node, [("id", title_id.as_str())])
+                                        .with_paragraph_attr(format!("NODE: {node}"), [("id", title_id.as_str())])
                                         .with_paragraph_attr(desc.as_str(), [("id", desc_id.as_str())]);
-                                    //add node details
         node_details
     }
 
-    pub fn get_time_html(&self, time_num: i32, time: &u64) -> Container {
+    /*
+     * Get an html element containing a formatted string with the details of a given time in the simulation
+     */
+    fn get_time_html(&self, time_num: i32, time: &u64) -> Container {
         let title_id = format!("title{time_num}");
         let desc_id = format!("description{time_num}");
-        let desc = format!("description for time: {time}");
+
+        // Get the open channels at this time in the simulation
+        let mut openchannels = String::from("");
+        match self.get_open_channels(time.clone()) {
+            Some(channels) => {
+                for c in channels {
+                    let srcbal = c.src_balance.clone();
+                    let destbal = c.dest_balance.clone();
+                    openchannels = openchannels + &c.src_node + " " + &String::from("&#8594") + " " + &c.dest_node + " (" + &format!("{srcbal}") + " " + &String::from("&#8594") + " " + &format!("{destbal}") + ")\n\t";
+                }
+            },
+            None => {}
+        };
+
+        // Get the transactions that occurred at this time in the simulation
+        let mut transactions = String::from("");
+        for t in self.get_all_transactions().unwrap() {
+            if t.time == time.clone() {
+                let amount = t.transaction.amount.clone();
+                transactions = transactions + &t.transaction.src_node + " " + &String::from("&#8594") + " " + &t.transaction.dest_node + " (" + &format!("{amount}") + ")\n\t";
+            }
+        }
+
+        // Get the closed channels at this time in the simulation
+        let mut closedchannels = String::from("");
+        match self.get_closed_channels(time.clone()) {
+            Some(channels) => {
+                for c in channels {
+                    let srcbal = c.src_balance.clone();
+                    let destbal = c.dest_balance.clone();
+                    closedchannels = closedchannels + &c.src_node + " " + &String::from("&#8594") + " " + &c.dest_node + " (" + &format!("{srcbal}") + " " + &String::from("&#8594") + " " + &format!("{destbal}") + ")\n\t";
+                }
+            },
+            None => {}
+        }
+
+        // Get the failed events at this time in the simulation
+        let mut failed = String::from("");
+        for f in &self.failed_events {
+            if f.sim_time.is_some() && f.sim_time.unwrap() == time.clone() {
+                failed = failed + &f.event.to_string() + " \n";
+            }
+        }
+
+        // Create the container
+        let desc = format!("TRANSACTIONS:\n\t{transactions}\n\nOPEN CHANNELS:\n\t{openchannels}\n\nCLOSED CHANNELS:\n\t{closedchannels}\n\nFAILED EVENTS:\n\t{failed}");
         let time_details = Container::new(ContainerType::Div)
                                         .with_attributes([("class", "details")])
-                                        .with_paragraph_attr(time, [("id", title_id.as_str())])
+                                        .with_paragraph_attr(format!("SIM TIME: {time}"), [("id", title_id.as_str())])
                                         .with_paragraph_attr(desc.as_str(), [("id", desc_id.as_str())]);
-                                    //add time details
         time_details
     }
 
-    pub fn get_nodes(&self) -> Vec<String> {
+    /*
+     * Get all the node names in the simulation
+     */
+    fn get_nodes(&self) -> Vec<String> {
         let mut nodes: Vec<String> = Vec::new();
         for name in self.balance.on_chain.keys() {
             nodes.push(name.clone());
@@ -289,7 +382,6 @@ impl SimResults {
      */
     fn find_closest_less(keys: Vec<&u64>, target: &u64) -> Option<u64> {
         let mut closest_key: Option<u64> = None;
-    
         for key in keys {
             if key == target {
                 return Some(key.clone());

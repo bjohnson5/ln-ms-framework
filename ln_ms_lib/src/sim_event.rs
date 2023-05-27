@@ -2,6 +2,9 @@
 use crate::sim_channel::SimChannel;
 use crate::sim_transaction::SimTransaction;
 
+// Standard Modules
+use std::fmt;
+
 /*
  * This enum represents all of the events that can be added to a simulation
  */
@@ -16,6 +19,22 @@ pub enum SimulationEvent {
     PaymentFailedEvent(String),
     PaymentSuccessEvent(String, u64),
     SimulationEndedEvent
+}
+
+impl fmt::Display for SimulationEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SimulationEvent::StartNodeEvent(_) => write!(f, "StartNodeEvent"),
+            SimulationEvent::StopNodeEvent(_) => write!(f, "StopNodeEvent"),
+            SimulationEvent::OpenChannelEvent(_) => write!(f, "OpenChannelEvent"),
+            SimulationEvent::CloseChannelEvent(_) => write!(f, "CloseChannelEvent"),
+            SimulationEvent::TransactionEvent(_) => write!(f, "TransactionEvent"),
+            SimulationEvent::PaymentPathSuccessful(_) => write!(f, "PaymentPathSuccessful"),
+            SimulationEvent::PaymentFailedEvent(_) => write!(f, "PaymentFailedEvent"),
+            SimulationEvent::PaymentSuccessEvent(_, _) => write!(f, "PaymentSuccessEvent"),
+            SimulationEvent::SimulationEndedEvent => write!(f, "SimulationEndedEvent"),
+        }
+    }
 }
 
 /*
