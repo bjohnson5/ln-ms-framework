@@ -34,7 +34,7 @@ cargo run
 
 ## Goals
 - Scale: Trim down the implementation in order to run large simulations with lots of nodes and channels
-- Liquidity Modeling: Allow for configuring the overall liquidity of the network
+- Liquidity Modeling: Allow for configuring the overall liquidity of the network and liquidity of the nodes
 - Configuration: Allow for more user configuration of nodes
 - Simulated Network Traffic: Create simulated transactions that impact the traffic and liquidity of the network
 - Simulated Mining functionality: Create a thread that generates new blocks at a given interval (this could be run as real time... 10 min for a new block to allow for real time testing... or as event driven faster than real time)

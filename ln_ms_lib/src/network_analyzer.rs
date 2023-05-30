@@ -26,10 +26,10 @@ use std::time::Duration;
  */
 pub struct NetworkAnalyzer {
     analyzer_runtime_handle: tokio::runtime::Handle,
-    results: SimResults,
-    pub_key_map: HashMap<String, String>,
-    bitcoind_client: Arc<BitcoindClient>,
-    finalized_closed_channels: Vec<String>
+    results: SimResults, // the results object to keep track of what happens in the simulation
+    pub_key_map: HashMap<String, String>, // pubkey to node name map
+    bitcoind_client: Arc<BitcoindClient>, // bitcoind client used to get information about on-chain operations
+    finalized_closed_channels: Vec<String> // keeping track of the channels that have been closed
 }
 
 impl NetworkAnalyzer {
@@ -70,12 +70,13 @@ impl NetworkAnalyzer {
                             let sc = SimChannel {
                                 src_node: n.name.clone(),
                                 dest_node: NetworkAnalyzer::get_dest_node(&network.channels, c.id),
-                                src_balance: c.outbound_capacity / 1000,
-                                dest_balance: c.inbound_capacity / 1000,
+                                src_balance_sats: c.outbound_capacity / 1000,
+                                dest_balance_sats: c.inbound_capacity / 1000,
                                 id: c.id.clone(),
                                 short_id: c.short_id.clone(),
                                 run_time_id: Some(c.run_time_id),
-                                funding_tx: c.funding_tx
+                                funding_tx: c.funding_tx,
+                                penalty_reserve_sats: c.punishment_reserve
                             };
                             self.results.channels.open_channels.get_mut(&0).unwrap().push(sc);
                         }
@@ -130,10 +131,11 @@ impl NetworkAnalyzer {
                                 self.results.failed_events.push(event.clone());
                             }
                         },
-                        SimulationEvent::CloseChannelEvent(channel) => {
-                            println!("[=== NetworkAnalyzer === {}] CloseChannelEvent for {}", crate::get_current_time(), channel.id);
+                        SimulationEvent::CloseChannelEvent(_, id) => {
+                            println!("[=== NetworkAnalyzer === {}] CloseChannelEvent for {}", crate::get_current_time(), id);
                             if event.success {
-                                let chan = self.get_last_open_channel_status(channel.id);
+                                // Get the last known status of this channel and save it to the closed channel list
+                                let chan = self.get_last_open_channel_status(id.clone());
                                 match chan {
                                     Some(c) => {
                                         self.update_close_channel_results(event.sim_time.unwrap().clone(), &c);
@@ -147,23 +149,28 @@ impl NetworkAnalyzer {
                         },
                         SimulationEvent::CloseChannelSuccessEvent(id) => {
                             println!("[=== NetworkAnalyzer === {}] CloseChannelSuccessEvent for {}", crate::get_current_time(), id);
+                            // Get the closed channel from the closed channel list and use those values to update balances
+                            // This channel was added to the closed list by the CloseChannelEvent that occurs before the CloseChannelSuccessEvent
                             let chan = self.get_last_closed_channel_status(id.clone());
                             match chan {
                                 Some((c, t)) => {
-                                    self.update_off_chain_balance(t, &c.src_node, c.src_balance + 1000, true);
-                                    self.update_off_chain_balance(t, &c.dest_node, c.dest_balance, true);
+                                    // This channel is closed so subtract the balance of this channel from the overall off-chain balance for the nodes involved
+                                    self.update_off_chain_balance(t, &c.src_node, c.get_src_balance(), true);
+                                    self.update_off_chain_balance(t, &c.dest_node, c.get_dest_balance(), true);
 
+                                    // This channel is in the process of closing, so wait until we find the closing transaction on-chain
+                                    // Then determine the fees and update the on-chain balance for the nodes involved
+                                    // TODO: we should not wait here, the closing transaction might take some time to get included in a block, this needs to happen on another thread
                                     let mut pending_channel_closes: Vec<(SimChannel, u64)> = Vec::new();
                                     pending_channel_closes.push((c.clone(), t));
-
                                     while !pending_channel_closes.is_empty() {
                                         let closes = pending_channel_closes.clone();
                                         pending_channel_closes.clear();
-                                        for (c, t) in closes {                                            
-                                            match self.get_closing_fees(c.src_balance, c.funding_tx.clone()).await {
+                                        for (c, t) in closes {
+                                            match self.get_closing_fees(c.src_balance_sats, c.funding_tx.clone()).await {
                                                 Some(fee) => {
-                                                    self.update_on_chain_balance(t, &c.src_node, c.src_balance + 1000 - fee.0, true);
-                                                    self.update_on_chain_balance(t, &c.dest_node, c.dest_balance - fee.1, true);
+                                                    self.update_on_chain_balance(t, &c.src_node, c.get_src_balance() - fee.0, true);
+                                                    self.update_on_chain_balance(t, &c.dest_node, c.get_dest_balance() - fee.1, true);
                                                 },
                                                 None => {
                                                     pending_channel_closes.push((c, t));
@@ -180,12 +187,16 @@ impl NetworkAnalyzer {
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("[=== NetworkAnalyzer === {}] OpenChannelEvent for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
                             if event.success {
+                                // Add this channel to the open list
                                 self.update_open_channel_results(event.sim_time.unwrap().clone(), channel);
-                                self.update_off_chain_balance(event.sim_time.unwrap().clone(), &channel.src_node, channel.src_balance + 1000, false);
-                                self.update_off_chain_balance(event.sim_time.unwrap().clone(), &channel.dest_node, channel.dest_balance, false);
 
+                                // This channel is opening, so add the balances to the off-chain balance for the nodes involved
+                                self.update_off_chain_balance(event.sim_time.unwrap().clone(), &channel.src_node, channel.get_src_balance(), false);
+                                self.update_off_chain_balance(event.sim_time.unwrap().clone(), &channel.dest_node, channel.get_dest_balance(), false);
+
+                                // Get the on-chain fees for opening this channel and subtract the on-chain balances for the nodes involved
                                 let src_open_fee = self.get_open_fees(channel.funding_tx.clone()).await;
-                                self.update_on_chain_balance(event.sim_time.unwrap().clone(), &channel.src_node, src_open_fee + channel.src_balance + channel.dest_balance + 1000, false);
+                                self.update_on_chain_balance(event.sim_time.unwrap().clone(), &channel.src_node, src_open_fee + channel.get_total_balance(), false);
                             } else {
                                 // The channel failed to open, add the event to the list of failed events
                                 self.results.failed_events.push(event.clone());
@@ -274,10 +285,10 @@ impl NetworkAnalyzer {
                                 }
                             };
 
-                            // Update the offchain balance for the source node (sending node)
+                            // Update the offchain balance for the source node (sending node), the rest of the nodes in the path will be updated in the PaymentPathSuccessful event
                             match current_tx {
                                 Some(t) => {
-                                    self.update_off_chain_balance(time, &t.src_node, t.amount + fee, true)
+                                    self.update_off_chain_balance(time, &t.src_node, t.amount_sats + fee, true)
                                 },
                                 None => {
                                     println!("Transaction for this success event was not found");
@@ -432,9 +443,10 @@ impl NetworkAnalyzer {
                             dest_node: prev_channel.dest_node.clone(),
                             short_id: prev_channel.short_id,
                             run_time_id: prev_channel.run_time_id.clone(),
-                            dest_balance: prev_channel.dest_balance - amount,
-                            src_balance: prev_channel.src_balance + amount,
-                            funding_tx: prev_channel.funding_tx.clone()
+                            dest_balance_sats: prev_channel.dest_balance_sats - amount,
+                            src_balance_sats: prev_channel.src_balance_sats + amount,
+                            funding_tx: prev_channel.funding_tx.clone(),
+                            penalty_reserve_sats: prev_channel.penalty_reserve_sats.clone()
                         };
                         open_list.push(new_chan);
                         updated = true;
@@ -448,9 +460,10 @@ impl NetworkAnalyzer {
                             dest_node: prev_channel.dest_node.clone(),
                             short_id: prev_channel.short_id,
                             run_time_id: prev_channel.run_time_id.clone(),
-                            dest_balance: prev_channel.dest_balance + amount,
-                            src_balance: prev_channel.src_balance - amount,
-                            funding_tx: prev_channel.funding_tx.clone()
+                            dest_balance_sats: prev_channel.dest_balance_sats + amount,
+                            src_balance_sats: prev_channel.src_balance_sats - amount,
+                            funding_tx: prev_channel.funding_tx.clone(),
+                            penalty_reserve_sats: prev_channel.penalty_reserve_sats.clone()
                         };
                         open_list.push(new_chan);
                         updated = true;
@@ -467,17 +480,28 @@ impl NetworkAnalyzer {
         self.results.channels.open_channels.insert(time, open_list);
     }
 
+    /*
+     * Use the bitcoind client to calculate the on-chain fees for the funding tx of a channel
+     */
     async fn get_open_fees(&self, funding_tx: Option<String>) -> u64 {
         (self.bitcoind_client.get_tx_fees(funding_tx.clone().unwrap()).await * 100000000.0).round() as u64
     }
 
+    /*
+     * Use the bitcoind client to calculate the on-chain fees for the closing tx of a channel
+     */
     async fn get_closing_fees(&self, src_chan_balance: u64, funding_tx: Option<String>) -> Option<(u64, u64)> {
+        // Find the transaction where the funding UTXO is used as an input (this means that transaction is the closing tx for this channel)
+        // Return an option of a tuple (source_node_fee, dest_node_fee)
         match self.bitcoind_client.find_input(funding_tx.clone().unwrap()).await {
             Some(closing_tx) => {
                 let src_bal = src_chan_balance as f64 / 100000000.0;
+                // Determine which node is closing the channel therefore which one is paying the fees
                 if self.bitcoind_client.is_output_value(closing_tx.clone(), src_bal).await {
+                    // If the source node's balance is equal to one of the outputs then it is not the one paying the fee
                     Some((0, (self.bitcoind_client.get_tx_fees(closing_tx.clone()).await * 100000000.0) as u64))
                 } else {
+                    // If the source node's balance is not equal to any one of the outputs then it is paying the fee
                     Some(((self.bitcoind_client.get_tx_fees(closing_tx.clone()).await * 100000000.0).round() as u64, 0))
                 }
             },
@@ -487,7 +511,11 @@ impl NetworkAnalyzer {
         }
     }
 
+    /*
+     * Get the last known status of a channel in the closed list
+     */
     fn get_last_closed_channel_status(&self, id: String) -> Option<(SimChannel, u64)> {
+        // If we have already closed this channel return None
         if self.finalized_closed_channels.contains(&id) {
             return None;
         }
@@ -503,6 +531,7 @@ impl NetworkAnalyzer {
             }
         };
 
+        // Find the channel by the runtime id
         for c in prev_open_list {
             if c.run_time_id.is_some() && c.run_time_id.clone().unwrap() == id {
                 return Some((c.clone(), time));
@@ -512,6 +541,9 @@ impl NetworkAnalyzer {
         return None;
     }
 
+    /*
+     * Get the last known status of a channel in the open list
+     */
     fn get_last_open_channel_status(&self, id: u64) -> Option<SimChannel> {
         let prev_open_list = match self.results.channels.open_channels.keys().copied().max() {
             Some(k) => {
@@ -522,6 +554,7 @@ impl NetworkAnalyzer {
             }
         };
 
+        // Find the channel by simulation id
         for c in prev_open_list {
             if c.id == id {
                 return Some(c.clone());

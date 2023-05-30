@@ -32,8 +32,8 @@ impl RuntimeNetworkGraph {
         }
         
         for c in channels {
-            self.channels.push(SimChannel { src_node: String::from(&c.src_node), dest_node: String::from(&c.dest_node), src_balance: c.src_balance, 
-                dest_balance: c.dest_balance, id: c.id, short_id: None, run_time_id: None, funding_tx: None });
+            self.channels.push(SimChannel { src_node: String::from(&c.src_node), dest_node: String::from(&c.dest_node), src_balance_sats: c.src_balance_sats, 
+                dest_balance_sats: c.dest_balance_sats, id: c.id, short_id: None, run_time_id: None, funding_tx: None, penalty_reserve_sats: c.penalty_reserve_sats });
         }
 
         let num = num_nodes + 1;

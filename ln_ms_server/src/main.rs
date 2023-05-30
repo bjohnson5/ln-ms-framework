@@ -71,7 +71,6 @@ async fn main() -> std::io::Result<()> {
 pub mod api {
     // Project Modules
     use ln_ms_lib::LnSimulation;
-    use ln_ms_lib::sim_channel::SimChannel;
     use ln_ms_lib::sim_results::SimResults;
 
     // Standard Modules
@@ -270,17 +269,7 @@ pub mod api {
                     } else if create_event_req.event_type == "OpenChannelEvent"{
                         s.create_open_channel_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time, create_event_req.channel_id);
                     } else if create_event_req.event_type == "CloseChannelEvent"{
-                        let chan = SimChannel {
-                            src_node: create_event_req.src_name,
-                            dest_node: create_event_req.dest_name,
-                            src_balance: create_event_req.amount,
-                            dest_balance: 0,
-                            id: create_event_req.channel_id,
-                            short_id: None,
-                            run_time_id: None,
-                            funding_tx: None
-                        };
-                        s.create_close_channel_event(chan, create_event_req.time);
+                        s.create_close_channel_event(create_event_req.src_name, create_event_req.channel_id, create_event_req.time);
                     } else if create_event_req.event_type == "TransactionEvent" {
                         s.create_transaction_event(create_event_req.src_name, create_event_req.dest_name, create_event_req.amount, create_event_req.time);
                     }

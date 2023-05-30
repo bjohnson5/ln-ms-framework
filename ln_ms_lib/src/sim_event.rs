@@ -10,16 +10,16 @@ use std::fmt;
  */
 #[derive(Clone, Debug)]
 pub enum SimulationEvent {
-    StartNodeEvent(String),
-    StopNodeEvent(String),
-    OpenChannelEvent(SimChannel),
-    CloseChannelEvent(SimChannel),
-    TransactionEvent(SimTransaction),
-    PaymentPathSuccessful(SimPaymentPath),
-    PaymentFailedEvent(String),
-    PaymentSuccessEvent(String, u64),
-    CloseChannelSuccessEvent(String),
-    SimulationEndedEvent
+    StartNodeEvent(String), // param: node name to start
+    StopNodeEvent(String), // param: node name to stop
+    OpenChannelEvent(SimChannel), // param: the details of the channel to open
+    CloseChannelEvent(String, u64), // param: node name and simulation defined channel id of the channel to close
+    TransactionEvent(SimTransaction), // param: the details of the transaction to attempt
+    PaymentPathSuccessful(SimPaymentPath), // sent from ln_event_processor when the node notifies us that a payment was successful
+    PaymentFailedEvent(String), // sent from ln_event_processor when the node notifies us that a payment failed. Param: payment id that failed
+    PaymentSuccessEvent(String, u64), // sent from ln_event_processor when the node notifies us that a payment was successful. Param: payment Id and the fee paid
+    CloseChannelSuccessEvent(String), // sent from ln_event_processor when the node notifies us that a channel closed. Param: node implementation channel id
+    SimulationEndedEvent // simulation has ended
 }
 
 impl fmt::Display for SimulationEvent {
@@ -28,7 +28,7 @@ impl fmt::Display for SimulationEvent {
             SimulationEvent::StartNodeEvent(_) => write!(f, "StartNodeEvent"),
             SimulationEvent::StopNodeEvent(_) => write!(f, "StopNodeEvent"),
             SimulationEvent::OpenChannelEvent(_) => write!(f, "OpenChannelEvent"),
-            SimulationEvent::CloseChannelEvent(_) => write!(f, "CloseChannelEvent"),
+            SimulationEvent::CloseChannelEvent(_,_) => write!(f, "CloseChannelEvent"),
             SimulationEvent::TransactionEvent(_) => write!(f, "TransactionEvent"),
             SimulationEvent::PaymentPathSuccessful(_) => write!(f, "PaymentPathSuccessful"),
             SimulationEvent::PaymentFailedEvent(_) => write!(f, "PaymentFailedEvent"),
@@ -72,7 +72,7 @@ pub struct SimEvent {
  */
 #[derive(Clone, Debug)]
 pub struct SimResultsEvent {
-    pub sim_time: Option<u64>, // Set to None for events that occur in response to another event: PaymentPathSuccessful, PaymentFailedEvent, PaymentSuccessEvent
+    pub sim_time: Option<u64>, // set to none for events that occur in response to another event: PaymentPathSuccessful, PaymentFailedEvent, PaymentSuccessEvent, CloseChannelSuccessEvent
     pub success: bool,
     pub event: SimulationEvent
 }

@@ -103,16 +103,15 @@ impl SenseiController {
                             let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: success, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
                         },
-                        SimulationEvent::CloseChannelEvent(channel) => {
-                            println!("[=== SenseiController === {}] CloseChannelEvent for {}", crate::get_current_time(), channel.id);
-                            // Tell the network analyzer that this channel has closed or failed to close at this time
+                        SimulationEvent::CloseChannelEvent(node, id) => {
+                            println!("[=== SenseiController === {}] CloseChannelEvent for {}", crate::get_current_time(), id);
+                            // Tell the network analyzer that this channel is closing
                             let sim_event = SimResultsEvent{sim_time: Some(event.sim_time.clone()), success: true, event: event.event.clone()};
                             output_channel.send(sim_event).expect("could not send the event");
-                            match channel_id_map.get(&channel.id) {
+                            match channel_id_map.get(id) {
                                 Some(chanid) => {
-                                    match self.close_channel(&channel.src_node, String::from(chanid)).await {
-                                        Ok(()) => {
-                                        },
+                                    match self.close_channel(node, String::from(chanid)).await {
+                                        Ok(()) => {},
                                         Err(e) => {
                                             println!("could not close channel: {:?}", e);
                                         }                                        
@@ -122,12 +121,10 @@ impl SenseiController {
                                     println!("could not find channel.");
                                 }
                             }
-
-
                         },
                         SimulationEvent::OpenChannelEvent(channel) => {
                             println!("[=== SenseiController === {}] OpenChannelEvent for {} <-> {}", crate::get_current_time(), channel.src_node, channel.dest_node);
-                            match self.open_channel(&channel.src_node, &channel.dest_node, channel.src_balance, channel.dest_balance, channel.id).await {
+                            match self.open_channel(&channel.src_node, &channel.dest_node, channel.src_balance_sats, channel.dest_balance_sats, channel.id).await {
                                 Ok(res) => {
                                     // Establish the relationship between sensei channel id and sim channel id for the new channel
                                     channel_id_map.insert(channel.id, res.0.clone());
@@ -147,9 +144,10 @@ impl SenseiController {
                                                         run_time_id: Some(res.0),
                                                         src_node: channel.src_node.clone(),
                                                         dest_node: channel.dest_node.clone(),
-                                                        src_balance: sc.outbound_capacity / 1000,
-                                                        dest_balance: sc.inbound_capacity / 1000,
-                                                        funding_tx: Some(res.1.clone())
+                                                        src_balance_sats: sc.outbound_capacity / 1000,
+                                                        dest_balance_sats: sc.inbound_capacity / 1000,
+                                                        funding_tx: Some(res.1.clone()),
+                                                        penalty_reserve_sats: sc.punishment_reserve
                                                     };
                                                     // Tell the network analyzer that this channel was opened and pass the new channel object to use
                                                     let channel_event = SimulationEvent::OpenChannelEvent(simchan);
@@ -173,7 +171,7 @@ impl SenseiController {
                         },
                         SimulationEvent::TransactionEvent(tx) => {
                             println!("[=== SenseiController === {}] TransactionEvent for {} <-> {}", crate::get_current_time(), tx.src_node, tx.dest_node);
-                            match self.get_invoice(&tx.dest_node, tx.amount).await {
+                            match self.get_invoice(&tx.dest_node, tx.amount_sats).await {
                                 Some(i) => {
                                     // Attempt to send a payment
                                     match self.send_payment(&tx.src_node, i).await {
@@ -183,7 +181,7 @@ impl SenseiController {
                                                 id: Some(id.clone()),
                                                 src_node: tx.src_node.clone(),
                                                 dest_node: tx.dest_node.clone(),
-                                                amount: tx.amount,
+                                                amount_sats: tx.amount_sats,
                                                 status: SimTransactionStatus::PENDING
                                             };
 
@@ -337,7 +335,7 @@ impl SenseiController {
         
         println!("[=== SenseiController === {}] Creating channels", crate::get_current_time());
         for c in channels {
-            match self.open_channel(&c.src_node, &c.dest_node, c.src_balance, c.dest_balance, c.id).await {
+            match self.open_channel(&c.src_node, &c.dest_node, c.src_balance_sats, c.dest_balance_sats, c.id).await {
                 Ok(res) => {
                     // Establish the relationship between sensei channel id and sim channel id for the new channel
                     self.channel_id_map.insert(c.id, res.0.clone());
@@ -426,7 +424,7 @@ impl SenseiController {
                                 };
                                 status.channels.push(SimNodeChannel::new(id, chan.short_channel_id, 
                                     chan.channel_id.clone(), chan.confirmations_required.unwrap(), chan.is_usable, chan.is_public, chan.is_outbound, chan.balance_msat,
-                                    chan.outbound_capacity_msat, chan.inbound_capacity_msat, chan.is_channel_ready, Some(funding_id)));
+                                    chan.outbound_capacity_msat, chan.inbound_capacity_msat, chan.is_channel_ready, Some(funding_id), chan.unspendable_punishment_reserve));
                             }
                             has_more = r.has_more;
                         },

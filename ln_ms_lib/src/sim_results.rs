@@ -4,7 +4,7 @@ use crate::sim_channel::SimChannel;
 use crate::sim_event::SimResultsEvent;
 
 // External Modules
-use build_html::*;
+use build_html::{Container, ContainerType, HtmlContainer, Html};
 
 // Standard Modules
 use std::collections::HashMap;
@@ -288,8 +288,8 @@ impl SimResults {
             Some(channels) => {
                 for c in channels {
                     if &c.src_node == node || &c.dest_node == node {
-                        let srcbal = c.src_balance.clone();
-                        let destbal = c.dest_balance.clone();
+                        let srcbal = c.src_balance_sats.clone();
+                        let destbal = c.dest_balance_sats.clone();
                         channels_string = channels_string + &c.src_node + " " + &String::from("&#8594") + " " + &c.dest_node + " (" + &format!("{srcbal}") + " " + &String::from("&#8594") + " " + &format!("{destbal}") + ")\n\t";
                     }
                 }
@@ -318,8 +318,8 @@ impl SimResults {
         match self.get_open_channels(time.clone()) {
             Some(channels) => {
                 for c in channels {
-                    let srcbal = c.src_balance.clone();
-                    let destbal = c.dest_balance.clone();
+                    let srcbal = c.src_balance_sats.clone();
+                    let destbal = c.dest_balance_sats.clone();
                     openchannels = openchannels + &c.src_node + " " + &String::from("&#8594") + " " + &c.dest_node + " (" + &format!("{srcbal}") + " " + &String::from("&#8594") + " " + &format!("{destbal}") + ")\n\t";
                 }
             },
@@ -330,7 +330,7 @@ impl SimResults {
         let mut transactions = String::from("");
         for t in self.get_all_transactions().unwrap() {
             if t.time == time.clone() {
-                let amount = t.transaction.amount.clone();
+                let amount = t.transaction.amount_sats.clone();
                 transactions = transactions + &t.transaction.src_node + " " + &String::from("&#8594") + " " + &t.transaction.dest_node + " (" + &format!("{amount}") + ")\n\t";
             }
         }
@@ -340,8 +340,8 @@ impl SimResults {
         match self.get_closed_channels(time.clone()) {
             Some(channels) => {
                 for c in channels {
-                    let srcbal = c.src_balance.clone();
-                    let destbal = c.dest_balance.clone();
+                    let srcbal = c.src_balance_sats.clone();
+                    let destbal = c.dest_balance_sats.clone();
                     closedchannels = closedchannels + &c.src_node + " " + &String::from("&#8594") + " " + &c.dest_node + " (" + &format!("{srcbal}") + " " + &String::from("&#8594") + " " + &format!("{destbal}") + ")\n\t";
                 }
             },

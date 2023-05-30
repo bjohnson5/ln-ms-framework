@@ -9,8 +9,8 @@ use lightning::util::events::Event;
 use senseicore::hex_utils;
 
 /*
- * This struct processes LDK events and sends the appropriate simulation results event.
- * Translates LDK events into simulation results
+ * This struct processes node implementation events and sends the appropriate simulation results event.
+ * Translates node specific events into simulation results.
  */
 pub struct LnEventProcessor {
     ln_event_runtime_handle: tokio::runtime::Handle,
@@ -26,13 +26,13 @@ impl LnEventProcessor {
     }
 
     /*
-     * Receive ldk events and update the results. 
-     * Each LDK node will have its own sender, so sim_receivers is the list of receivers that correspond to the senders
+     * Receive node events and update the results. 
+     * Each node will have its own sender, so sim_receivers is the list of receivers that correspond to the senders.
      */
     pub fn process_events(&self, sim_receivers: Vec<broadcast::Receiver<Event>>, sim_results_sender: broadcast::Sender<SimResultsEvent>, mut sim_event_receiver: broadcast::Receiver<SimEvent>) {
          tokio::task::block_in_place(move || {
             self.ln_event_runtime_handle.clone().block_on(async move {
-                // Start a thread for each of the ldk receivers and save the handles
+                // Start a thread for each of the node receivers and save the handles
                 let mut handles= Vec::new();
                 for r in sim_receivers {
                     let h = tokio::spawn(LnEventProcessor::node_receive(r, sim_results_sender.clone()));
@@ -63,11 +63,11 @@ impl LnEventProcessor {
     }
 
     /*
-     * Receives events from ldk and updates the simulation results as needed
+     * Receives events from node implementations and updates the simulation results as needed
      */
     async fn node_receive(mut rec: broadcast::Receiver<Event>, sender: broadcast::Sender<SimResultsEvent>) {
         loop {
-            // Listen for events coming from the ldk nodes
+            // Listen for events coming from the nodes
             let event = match rec.recv().await {
                 Ok(e) => {e},
                 Err(_) => {
@@ -126,6 +126,7 @@ impl LnEventProcessor {
                     sender.send(e).expect("could not send the event");
                 },
                 Event::ChannelClosed { channel_id, ..} => {
+                    // A channel is starting to close, send the id to the network analyzer
                     let simevent = SimulationEvent::CloseChannelSuccessEvent(hex_utils::hex_str(channel_id));
                     let e = SimResultsEvent {
                         sim_time: None,

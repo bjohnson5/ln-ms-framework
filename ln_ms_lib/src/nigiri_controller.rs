@@ -4,6 +4,7 @@ use std::process::Command;
 /*
  * These functions controll the nigiri instance that is running bitcoind.
  * TODO: Is there a better way to control the underlying bitcoin blockchain? Instead of running bash commands to control nigiri?
+ *       - Use the bitciond_client to control the chain
  */
 
 /*

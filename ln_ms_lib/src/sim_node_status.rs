@@ -1,6 +1,6 @@
 /*
- * This struct represents the status of a node in the simulation as reported by sensei.
- * These values are set by querying the sensei library and getting info on the node.
+ * This struct represents the status of a node in the simulation as reported by the node implementation.
+ * These values are set by querying the node library and getting info on the node.
  */
 #[derive(Clone, Debug)]
 pub struct SimNodeStatus {
@@ -32,7 +32,7 @@ impl SimNodeStatus {
 }
 
 /*
- * The balance of a node as reported by sensei
+ * The balance of a node as reported by the node
  */
 #[derive(Clone, Debug)]
 pub struct SimNodeBalance {
@@ -54,7 +54,7 @@ impl SimNodeBalance {
 }
 
 /*
- * The information about a channel as reported by sensei
+ * The information about a channel as reported by the node
  */
 #[derive(Clone, Debug)]
 pub struct SimNodeChannel {
@@ -69,11 +69,12 @@ pub struct SimNodeChannel {
     pub outbound_capacity: u64,
     pub inbound_capacity: u64,
     pub is_channel_ready: bool,
-    pub funding_tx: Option<String>
+    pub funding_tx: Option<String>,
+    pub punishment_reserve: Option<u64>
 }
 
 impl SimNodeChannel {
-    pub fn new(id: u64, short_id: Option<u64>, run_time_id: String, conf_req: u32, usable: bool, public: bool, outbound: bool, bal: u64, out_bal: u64, in_bal: u64, ready: bool, funding_tx: Option<String>) -> Self {
+    pub fn new(id: u64, short_id: Option<u64>, run_time_id: String, conf_req: u32, usable: bool, public: bool, outbound: bool, bal: u64, out_bal: u64, in_bal: u64, ready: bool, funding_tx: Option<String>, punishment: Option<u64>) -> Self {
         let channel = SimNodeChannel {
             id: id,
             short_id: short_id,
@@ -86,7 +87,8 @@ impl SimNodeChannel {
             outbound_capacity: out_bal,
             inbound_capacity: in_bal,
             is_channel_ready: ready,
-            funding_tx: funding_tx
+            funding_tx: funding_tx,
+            punishment_reserve: punishment
         };
 
         channel
