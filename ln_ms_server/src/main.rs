@@ -276,7 +276,9 @@ pub mod api {
                             src_balance: create_event_req.amount,
                             dest_balance: 0,
                             id: create_event_req.channel_id,
-                            short_id: None
+                            short_id: None,
+                            run_time_id: None,
+                            funding_tx: None
                         };
                         s.create_close_channel_event(chan, create_event_req.time);
                     } else if create_event_req.event_type == "TransactionEvent" {

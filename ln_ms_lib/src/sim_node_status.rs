@@ -60,6 +60,7 @@ impl SimNodeBalance {
 pub struct SimNodeChannel {
     pub id: u64,
     pub short_id: Option<u64>,
+    pub run_time_id: String,
     pub confirmations_required: u32,
     pub is_usable: bool,
     pub is_public: bool,
@@ -67,14 +68,16 @@ pub struct SimNodeChannel {
     pub balance: u64,
     pub outbound_capacity: u64,
     pub inbound_capacity: u64,
-    pub is_channel_ready: bool
+    pub is_channel_ready: bool,
+    pub funding_tx: Option<String>
 }
 
 impl SimNodeChannel {
-    pub fn new(id: u64, short_id: Option<u64>, conf_req: u32, usable: bool, public: bool, outbound: bool, bal: u64, out_bal: u64, in_bal: u64, ready: bool) -> Self {
+    pub fn new(id: u64, short_id: Option<u64>, run_time_id: String, conf_req: u32, usable: bool, public: bool, outbound: bool, bal: u64, out_bal: u64, in_bal: u64, ready: bool, funding_tx: Option<String>) -> Self {
         let channel = SimNodeChannel {
             id: id,
             short_id: short_id,
+            run_time_id: run_time_id,
             confirmations_required: conf_req,
             is_usable: usable,
             is_public: public,
@@ -82,7 +85,8 @@ impl SimNodeChannel {
             balance: bal,
             outbound_capacity: out_bal,
             inbound_capacity: in_bal,
-            is_channel_ready: ready
+            is_channel_ready: ready,
+            funding_tx: funding_tx
         };
 
         channel

@@ -124,6 +124,15 @@ impl LnEventProcessor {
                         event: simevent
                     };
                     sender.send(e).expect("could not send the event");
+                },
+                Event::ChannelClosed { channel_id, ..} => {
+                    let simevent = SimulationEvent::CloseChannelSuccessEvent(hex_utils::hex_str(channel_id));
+                    let e = SimResultsEvent {
+                        sim_time: None,
+                        success: true,
+                        event: simevent
+                    };
+                    sender.send(e).expect("could not send the event");
                 }
                 _ => {
                     // Ignore all other events

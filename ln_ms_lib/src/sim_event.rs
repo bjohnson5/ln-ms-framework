@@ -18,6 +18,7 @@ pub enum SimulationEvent {
     PaymentPathSuccessful(SimPaymentPath),
     PaymentFailedEvent(String),
     PaymentSuccessEvent(String, u64),
+    CloseChannelSuccessEvent(String),
     SimulationEndedEvent
 }
 
@@ -32,6 +33,7 @@ impl fmt::Display for SimulationEvent {
             SimulationEvent::PaymentPathSuccessful(_) => write!(f, "PaymentPathSuccessful"),
             SimulationEvent::PaymentFailedEvent(_) => write!(f, "PaymentFailedEvent"),
             SimulationEvent::PaymentSuccessEvent(_, _) => write!(f, "PaymentSuccessEvent"),
+            SimulationEvent::CloseChannelSuccessEvent(_) => write!(f, "CloseChannelSuccessEvent"),
             SimulationEvent::SimulationEndedEvent => write!(f, "SimulationEndedEvent"),
         }
     }

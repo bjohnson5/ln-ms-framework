@@ -23,6 +23,7 @@ cargo run
 ```
 - After starting the server, view the swagger API documentation here: http://localhost:8080/swagger-ui/index.html
 - After creating a simulation, view the network monitor here: http://localhost:8080/network_monitor
+- After the simulation is finished, view the results here: http://localhost:8080/results
 
 ## Dependencies
 - Currently only runs on a linux OS

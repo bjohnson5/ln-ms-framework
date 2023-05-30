@@ -204,7 +204,7 @@ impl LnSimulation {
                     config.clone(),
                     bitcoind_client.clone(),
                     bitcoind_client.clone(),
-                    bitcoind_client,
+                    bitcoind_client.clone(),
                 )
                 .await
                 .expect("could not initialize the sensei chain manager"),
@@ -227,7 +227,7 @@ impl LnSimulation {
             );
 
             // Create the network analyzer
-            let mut network_analyzer = NetworkAnalyzer::new(analyzer_runtime_handle);
+            let mut network_analyzer = NetworkAnalyzer::new(analyzer_runtime_handle, bitcoind_client.clone());
 
             // Create the ln event processor
             let ln_event_proc = LnEventProcessor::new(ln_event_runtime_handle);
@@ -475,7 +475,9 @@ impl LnSimulation {
             src_balance: amount,
             dest_balance: 0,
             id: id,
-            short_id: None
+            short_id: None,
+            run_time_id: None,
+            funding_tx: None
         };
         self.user_channels.push(channel.clone());
 
@@ -511,7 +513,9 @@ impl LnSimulation {
             src_balance: amount, 
             dest_balance: 0,
             id: id,
-            short_id: None
+            short_id: None,
+            run_time_id: None,
+            funding_tx: None
         };
         let event = SimulationEvent::OpenChannelEvent(channel.clone());
         self.add_event(event, time);
@@ -732,8 +736,8 @@ mod tests {
                 // balances at start of sim
                 let bal1_on = res.get_on_chain_bal(time_start, &node1).unwrap();
                 let bal1_off = res.get_off_chain_bal(time_start, &node1).unwrap();
-                assert!(bal1_on < 160000); // 200000 - the amount of the channel - minus fees
-                assert_eq!(bal1_off, 40000);
+                assert_eq!(bal1_on, 158776); // initial balance (200000) - the amount of the channel (40000) - fees (1224)
+                assert_eq!(bal1_off, 40000); // amount of the channel
 
                 let bal2_on = res.get_on_chain_bal(time_start, &node2).unwrap();
                 let bal2_off = res.get_off_chain_bal(time_start, &node2).unwrap();
@@ -752,8 +756,8 @@ mod tests {
                 assert_eq!(num_chan, 1);
 
                 // balances after payment
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 37000); // 40000 - payment
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000); // 0 + payment
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 37000); // initial channel balance (40000) - payment (3000)
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000); // initial channel balance (0) + payment (3000)
 
                 // channel balances after payment
                 let mut src_balance = 0;
@@ -765,12 +769,109 @@ mod tests {
                         break;
                     }
                 }
-                assert_eq!(src_balance, 36000); // TODO: why is the channel balance 1000 less than the on chain balance and the amount the channel was opened with (36000 instead of 37000)
-                assert_eq!(dest_balance, 3000);
+                assert_eq!(src_balance, 36000); // initial channel balance (40000) - unspendable punishment (1000) - payment (3000)
+                assert_eq!(dest_balance, 3000); // initial channel balance (0) + payment (3000)
 
-                // TODO: on chain balances after payment and closing the channel
-                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node1).unwrap(), ?);
-                //assert_eq!(res.get_on_chain_bal(time_after_stop, &node2).unwrap(), ?);
+                // TODO: balances after payment and closing the channel
+                assert_eq!(res.get_off_chain_bal(time_after_stop, &node1).unwrap(), 0);
+                assert_eq!(res.get_off_chain_bal(time_after_stop, &node2).unwrap(), 0);
+                assert_eq!(res.get_on_chain_bal(time_after_stop, &node1).unwrap(), 193428);
+                assert_eq!(res.get_on_chain_bal(time_after_stop, &node2).unwrap(), 3000);
+
+                // status of each node at the end of the sim
+                assert_eq!(res.get_node_status(time_after_stop, &node1), false);
+                assert_eq!(res.get_node_status(time_after_stop, &node2), false);
+
+                // number open channels at end of sim
+                assert_eq!(res.get_open_channels(time_after_stop).unwrap().len(), 0);
+
+                // number of transactions in the sim
+                assert_eq!(res.get_all_transactions().unwrap().len(), 1);
+            },
+            Err(e) => {
+                // fail the test
+                println!("Test failed due to error: {:?}", e);
+                assert_eq!(true, false);
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn another_direct_payment() {
+        let mut ln_sim = LnSimulation::new(String::from("test"), 10, 0);
+        
+        ln_sim.create_node(String::from("node1"), 200000, true);
+        ln_sim.create_node(String::from("node2"), 0, true);
+
+        let chan1 = ln_sim.create_open_channel_event(String::from("node1"), String::from("node2"), 40000, 2, 1);
+        ln_sim.create_transaction_event(String::from("node1"), String::from("node2"), 3000, 4);
+        ln_sim.create_close_channel_event(chan1, 6);
+        ln_sim.create_stop_node_event(String::from("node1"), 8);
+        ln_sim.create_stop_node_event(String::from("node2"), 8);
+
+        // Start the simulation
+        let sim_results = ln_sim.run(true);
+        match sim_results {
+            Ok(res) => {
+                // check results
+                let time_start = 0;
+                let time_open_channel = 3;
+                let time_after_payment = 5;
+                let time_after_stop = 9;
+                let node1 = String::from("node1");
+                let node2 = String::from("node2");
+
+                // balances at start of sim
+                let bal1_on = res.get_on_chain_bal(time_start, &node1).unwrap();
+                let bal1_off = res.get_off_chain_bal(time_start, &node1).unwrap();
+                assert_eq!(bal1_on, 200000); // initial balance (200000)
+                assert_eq!(bal1_off, 0); // amount of the channel
+
+                let bal2_on = res.get_on_chain_bal(time_start, &node2).unwrap();
+                let bal2_off = res.get_off_chain_bal(time_start, &node2).unwrap();
+                assert_eq!(bal2_on, 0);
+                assert_eq!(bal2_off, 0);
+
+                // status of each node at the start of the sim
+                let status1 = res.get_node_status(time_start, &node1);
+                let status2 = res.get_node_status(time_start, &node2);
+
+                assert_eq!(status1, true);
+                assert_eq!(status2, true);
+                
+                // number open channels at start of sim
+                let num_chan = res.get_open_channels(time_start).unwrap().len();
+                assert_eq!(num_chan, 0);
+
+                // balances after opening channel
+                let bal1_on1 = res.get_on_chain_bal(time_open_channel, &node1).unwrap();
+                let bal1_off1 = res.get_off_chain_bal(time_open_channel, &node1).unwrap();
+                assert_eq!(bal1_on1, 158776); // initial balance (200000) - the amount of the channel (40000) - fees (1224)
+                assert_eq!(bal1_off1, 40000); // amount of the channel
+
+                // balances after payment
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 37000); // initial channel balance (40000) - payment (3000)
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000); // initial channel balance (0) + payment (3000)
+
+                // channel balances after payment
+                let mut src_balance = 0;
+                let mut dest_balance = 0;
+                for c in res.get_open_channels(time_after_payment).unwrap() {
+                    if c.id == 1 {
+                        src_balance = c.src_balance;
+                        dest_balance = c.dest_balance;
+                        break;
+                    }
+                }
+                assert_eq!(src_balance, 36000); // initial channel balance (40000) - unspendable punishment (1000) - payment (3000)
+                assert_eq!(dest_balance, 3000); // initial channel balance (0) + payment (3000)
+
+                // TODO: balances after payment and closing the channel
+                assert_eq!(res.get_off_chain_bal(time_after_stop, &node1).unwrap(), 0);
+                assert_eq!(res.get_off_chain_bal(time_after_stop, &node2).unwrap(), 0);
+                assert_eq!(res.get_on_chain_bal(time_after_stop, &node1).unwrap(), 193428);
+                assert_eq!(res.get_on_chain_bal(time_after_stop, &node2).unwrap(), 3000);
 
                 // status of each node at the end of the sim
                 assert_eq!(res.get_node_status(time_after_stop, &node1), false);

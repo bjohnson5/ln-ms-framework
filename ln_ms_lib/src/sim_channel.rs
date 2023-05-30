@@ -8,6 +8,8 @@ use serde::{Serialize, Deserialize};
 pub struct SimChannel {
     pub id: u64,
     pub short_id: Option<u64>, // Set when the channel is created in sensei
+    pub run_time_id: Option<String>, // Set when the channel is created in sensei
+    pub funding_tx: Option<String>, // Set when the channel is created in sensei
     pub src_node: String,
     pub dest_node: String,
     pub src_balance: u64,
