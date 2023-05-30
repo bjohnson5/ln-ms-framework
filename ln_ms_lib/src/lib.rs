@@ -962,7 +962,7 @@ mod tests {
 
                 // balances after payment
                 assert_eq!(res.get_off_chain_bal(time_after_payment, &node1).unwrap(), 36999); // 3000 sent for the payment and 1 sat for a fee
-                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000);
+                assert_eq!(res.get_off_chain_bal(time_after_payment, &node2).unwrap(), 3000); // receives 3000 sat payment
                 assert_eq!(res.get_off_chain_bal(time_after_payment, &node3).unwrap(), 40001); // gains 1 sat for forwarding the payment on behalf of node1
 
                 // channel balances after payment
