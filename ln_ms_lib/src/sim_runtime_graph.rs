@@ -39,7 +39,7 @@ impl RuntimeNetworkGraph {
         let num = num_nodes + 1;
         for number in 1..num {
             let node_name = String::from("simnode")+&number.to_string();
-            // TODO: get the real initial balance for the simulation nodes, 1 BTC is a placeholder for now
+            // TODO: get the real initial balance for the simulation nodes, 1 BTC is a placeholder for now. How do we model liquidity?
             self.nodes.push(SimNode { name: String::from(&node_name), initial_balance: 1_000_000_000, running: true });
         }
     }

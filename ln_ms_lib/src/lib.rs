@@ -159,8 +159,6 @@ impl LnSimulation {
             .build()?;
         let sensei_admin_runtime_handle = sensei_admin_runtime.handle().clone();
 
-        // TODO: Setup the transaction generator runtime
-
         // Setup the network graph main runtime
         let network_graph_runtime = Builder::new_multi_thread()
             .worker_threads(20)
@@ -251,8 +249,6 @@ impl LnSimulation {
             // Create the sensei controller
             let mut sensei_controller = SenseiController::new(sensei_admin_service, sensei_runtime_handle);
 
-            // TODO: Create the transaction generator
-
             // Create the event manager
             let event_manager = SimEventManager::new(self.user_events.clone());
 
@@ -309,13 +305,6 @@ impl LnSimulation {
                 let sensei_controller_handle = s.spawn(move || {
                     sensei_controller_arc.process_events(sensei_event_receiver, sim_results_event_sender);
                 });
-                
-                /* 
-                 * TODO: Start the TransactionGenerator
-                 * - Clone the sim_event_sender and pass to transaction generator so that it can send events
-                 * - this thread will generate simulated network traffic
-                 */
-                println!("[=== LnSimulation === {}] Starting the transaction generator", get_current_time());
 
                 // Start the runtime graph
                 println!("[=== LnSimulation === {}] Simulation: {} running", get_current_time(), self.name);
@@ -330,6 +319,8 @@ impl LnSimulation {
                  *   the duration is denoted in seconds and will run in real time... eventually this will need to be changed to a purely event driven
                  *   time concept that will allow the simulations to be run in a faster-than-real-time mode
                  * - allow for a use case where the user wants to spin up a large network and connect a user-controlled node to perform manual testing
+                 * - mining, on-chain transactions, block updates all need to be considered, we do not want to wait 10 min for a block to be added
+                 *   need to model an event driven on-chain process that will mine blocks at faster than real time.
                  */
                 println!("[=== LnSimulation === {}] Starting the event manager", get_current_time());
                 let event_manager_arc = Arc::new(event_manager);

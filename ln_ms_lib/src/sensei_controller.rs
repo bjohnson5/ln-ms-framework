@@ -254,7 +254,7 @@ impl SenseiController {
                     AdminResponse::CreateNode { .. } => {
                         match self.get_sensei_node(&node_name).await {
                             Ok(node) => {
-                                // TODO: fund the simulation node with the configured amount. 1 BTC is a place holder for now.
+                                // TODO: fund the simulation node with the configured amount. 1 BTC is a place holder for now. How do we model network liquidity?
                                 if nigiri {
                                     let node_req = NodeRequest::GetUnusedAddress {};
                                     match node.call(node_req).await {
@@ -548,7 +548,7 @@ impl SenseiController {
                         //      that will simulate accurate channel closing... you have to wait until the closing tx is included in a block
                         //      this needs to be removed, makes it easier for testing purposes right now... immediatly making the closing transaction valid by mining blocks and sleeping to let the chain manager update
                         //      in order to be more realistic, the simulation should have to wait to see the confirmed funding transaction before using the channel
-                        //      the sensei chain manager updates once a second. We need to wait and make sure all funding txs are seen by the chain manager.
+                        // The sensei chain manager updates once a second. We need to wait and make sure all funding txs are seen by the chain manager.
                         nigiri_controller::mine();
                         tokio::time::sleep(Duration::from_secs(2)).await;
                         Ok(())
@@ -614,7 +614,7 @@ impl SenseiController {
                                 //      that will simulate accurate channel opening... you have to wait until the funding tx is included in a block
                                 //      this needs to be removed, makes it easier for testing purposes right now... immediatly making the closing transaction valid by mining blocks and sleeping to let the chain manager update
                                 //      in order to be more realistic, the simulation should have to wait to see the confirmed funding transaction before using the channel
-                                //      the sensei chain manager updates once a second. We need to wait and make sure all funding txs are seen by the chain manager.
+                                // The sensei chain manager updates once a second. We need to wait and make sure all funding txs are seen by the chain manager.
                                 nigiri_controller::mine();
                                 tokio::time::sleep(Duration::from_secs(2)).await;
                                 match &r[0].funding_txid {

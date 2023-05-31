@@ -161,6 +161,7 @@ impl NetworkAnalyzer {
                                     // This channel is in the process of closing, so wait until we find the closing transaction on-chain
                                     // Then determine the fees and update the on-chain balance for the nodes involved
                                     // TODO: we should not wait here, the closing transaction might take some time to get included in a block, this needs to happen on another thread
+                                    // TODO: mining in general needs to be modeled and simulated in a separate thread/process.
                                     let mut pending_channel_closes: Vec<(SimChannel, u64)> = Vec::new();
                                     pending_channel_closes.push((c.clone(), t));
                                     while !pending_channel_closes.is_empty() {
