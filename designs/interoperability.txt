@@ -1,0 +1,19 @@
+// https://yuml.me/diagram/scruffy/class/draw
+
+[SimEventManager]-SimulationEvent>[LnController]^[LndController]-RPC>[LndModel]
+[LnController]^[EclairController]-RPC>[EclairModel]
+[LnController]^[CoreLnController]-RPC>[CoreLnModel]
+[LnController]^[LdkController]-RPC>[LdkModel]
+
+[LndModel]<->[LnEventHandler]^[LndEventHandler]SimResultsEvent->[NetworkAnalyzer]
+[EclairModel]<->[LnEventHandler]^[EclairEventHandler]SimResultsEvent->[NetworkAnalyzer]
+[CoreLnModel]<->[LnEventHandler]^[CoreLnEventHandler]SimResultsEvent->[NetworkAnalyzer]
+[LdkModel]<->[LnEventHandler]^[LdkEventHandler]SimResultsEvent->[NetworkAnalyzer]
+
+[LnController]-.-[note: One LnController for each LN implementation in the simulation.\nManages all of the nodes in the simulation that use this implementation\n1. Processes simulation events\n2. Determines if this event involves one of its nodes\n3. Makes the RPC call to the LN implementation]
+
+[LndModel]-.-[note: A trimmed down simulation model of each LN implementation]
+[EclairModel]-.-[note: A trimmed down simulation model of each LN implementation]
+[CoreLnModel]-.-[note: A trimmed down simulation model of each LN implementation]
+[LdkModel]-.-[note: A trimmed down simulation model of each LN implementation]
+[LnEventHandler]-.-[note: Processes or monitors the events coming from the specific node implementations\nand passes them to the NetworkAnalyzer]

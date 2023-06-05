@@ -1,3 +1,5 @@
+// https://yuml.me/diagram/scruffy/class/draw
+
 [Web API; ln_ms_server]<->[Database]
 [Web API]->[Simulation Library; ln_ms_lib]
 [Simulation Library]<->[Sensei Rust Library]
